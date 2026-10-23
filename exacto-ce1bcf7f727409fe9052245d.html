@@ -1,0 +1,1149 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Monitor de Fondos</title><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap"><style>
+/* Concepto: tablero de tesorería para el CFO. Primero el resumen y las alarmas, después la tabla comparativa y, al abrir un fondo, la evidencia (pares, flujos, composición, duración). */
+:root{
+  --bg:#F2F5F8; --surface:#FFFFFF; --surface-2:#E9EEF3; --ink:#13202B; --ink-2:#44545F; --ink-3:#5A6976;
+  --line:#D5DDE5; --accent:#0B5C7A; --accent-ink:#FFFFFF; --series-b:#7C8A97;
+  --ok:#17703F; --ok-bg:#E1F2E8; --warn:#8F5A00; --warn-bg:#FBEFD5; --crit:#B3261E; --crit-bg:#FBE3E0;
+  --sans:'IBM Plex Sans',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+  --mono:'IBM Plex Mono',ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0E161D; --surface:#151F28; --surface-2:#1C2833; --ink:#E6EDF3; --ink-2:#B3C0CC; --ink-3:#93A2B0;
+    --line:#2A3846; --accent:#5BB8DB; --accent-ink:#06222E; --series-b:#8FA0AF;
+    --ok:#5BD08F; --ok-bg:#12301F; --warn:#F0B64D; --warn-bg:#33270F; --crit:#FF8A80; --crit-bg:#3A1816;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0E161D; --surface:#151F28; --surface-2:#1C2833; --ink:#E6EDF3; --ink-2:#B3C0CC; --ink-3:#93A2B0;
+  --line:#2A3846; --accent:#5BB8DB; --accent-ink:#06222E; --series-b:#8FA0AF;
+  --ok:#5BD08F; --ok-bg:#12301F; --warn:#F0B64D; --warn-bg:#33270F; --crit:#FF8A80; --crit-bg:#3A1816;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:14px;line-height:1.45;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:20px 48px}
+.wrap{max-width:1200px;margin:0 auto;display:flex;flex-direction:column;gap:20px}
+h1,h2,h3{margin:0;font-weight:600;text-wrap:balance}
+h1{font-size:22px;letter-spacing:-.01em}
+h2{font-size:15px}
+h3{font-size:13px;color:var(--ink-2)}
+p{margin:0}
+.muted{color:var(--ink-3)}
+.mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
+button{font:inherit;color:inherit;cursor:pointer}
+button:focus-visible,summary:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+/* Encabezado */
+.top{display:flex;flex-wrap:wrap;gap:12px 24px;align-items:flex-end;justify-content:space-between}
+.top .meta{display:flex;flex-direction:column;gap:2px;min-width:0}
+.eyebrow{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);font-weight:500}
+.actions{display:flex;gap:8px;flex-wrap:wrap}
+.btn{border:1px solid var(--line);background:var(--surface);border-radius:6px;padding:7px 12px;font-weight:500}
+.btn:hover{border-color:var(--accent)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.btn[disabled]{opacity:.55;cursor:default}
+.badge{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:999px;padding:2px 10px;font-size:12px;background:var(--surface);color:var(--ink-2)}
+.badge.foto{border-color:var(--warn);color:var(--warn);background:var(--warn-bg)}
+.status{font-size:12px;color:var(--ink-3);min-height:18px}
+
+/* Resumen */
+.summary{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.6fr);gap:16px}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:16px;min-width:0}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-top:10px}
+.tile{display:flex;align-items:center;gap:10px;border:1px solid var(--line);border-radius:6px;padding:10px 12px}
+.tile b{font-size:22px;font-weight:600;font-family:var(--mono);line-height:1}
+.tile span.l{font-size:12px;color:var(--ink-2)}
+.ctx{margin-top:12px;font-size:12px;color:var(--ink-3);display:flex;gap:6px 16px;flex-wrap:wrap}
+.alerts{list-style:none;margin:10px 0 0;padding:0;display:flex;flex-direction:column;gap:8px}
+.alerts li{display:flex;gap:10px;align-items:flex-start;padding:8px 10px;border-radius:6px;background:var(--surface-2)}
+.alerts li .t{min-width:0}
+.alerts li strong{font-weight:600}
+
+/* Señales (forma + texto, nunca solo color) */
+.sg{display:inline-block;width:11px;height:11px;flex:none;vertical-align:-1px}
+.sg.s0{background:var(--ok);border-radius:50%}
+.sg.s1{background:var(--warn);clip-path:polygon(50% 0,100% 100%,0 100%)}
+.sg.s2{background:var(--crit);border-radius:1px}
+.sg.sn{border:2px solid var(--ink-3);border-radius:50%;width:11px;height:11px}
+.pill{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:2px 9px;font-size:12px;font-weight:500;white-space:nowrap}
+.pill.s0{background:var(--ok-bg);color:var(--ok)}
+.pill.s1{background:var(--warn-bg);color:var(--warn)}
+.pill.s2{background:var(--crit-bg);color:var(--crit)}
+.pill.sn{background:var(--surface-2);color:var(--ink-2)}
+.pill.neutral{background:var(--surface-2);color:var(--ink-2)}
+
+/* Tabla */
+.group{display:flex;flex-direction:column;gap:8px}
+.group>header{display:flex;flex-wrap:wrap;gap:4px 12px;align-items:baseline}
+.tablewrap{overflow-x:auto;background:var(--surface);border:1px solid var(--line);border-radius:8px;container-type:inline-size}
+table{border-collapse:separate;border-spacing:0;width:100%;min-width:960px;font-size:13px}
+th,td{padding:9px 8px;text-align:right;border-bottom:1px solid var(--line);white-space:nowrap;vertical-align:middle}
+.patc{display:flex;flex-direction:column;align-items:flex-end;gap:3px}
+th{font-size:11px;letter-spacing:.04em;text-transform:uppercase;color:var(--ink-3);font-weight:500;background:var(--surface)}
+th button{background:none;border:0;padding:0;font:inherit;letter-spacing:inherit;text-transform:inherit;color:inherit;display:inline-flex;gap:4px;align-items:center}
+th button:hover{color:var(--ink)}
+.sa{font-size:.9em}.sa.off{opacity:.35}th button:hover .sa.off{opacity:.8}
+th:first-child,td:first-child{text-align:left;position:sticky;left:0;background:var(--surface);z-index:1;min-width:210px;max-width:250px;white-space:normal;padding-left:12px}
+tr:last-child>td{border-bottom:0}
+.rowbtn{background:none;border:0;padding:0;text-align:left;display:block;width:100%}
+.rowbtn .nm{font-weight:600;display:flex;gap:6px;align-items:center}
+.rowbtn .sub{font-size:12px;color:var(--ink-3)}
+.rowbtn .chev{display:inline-block;width:8px;height:8px;border-right:2px solid var(--ink-3);border-bottom:2px solid var(--ink-3);transform:rotate(-45deg);transition:transform .15s;flex:none}
+.rowbtn[aria-expanded="true"] .chev{transform:rotate(45deg)}
+td.best{font-weight:600}
+td.best::after{content:"▲";font-size:8px;margin-left:4px;color:var(--accent);vertical-align:2px}
+.chips{display:inline-flex;flex-wrap:wrap;gap:4px;max-width:260px;justify-content:flex-start}
+td.chipcell{white-space:normal;text-align:left}
+.chip{display:inline-flex;align-items:center;gap:4px;font-size:11px;border:1px solid var(--line);border-radius:4px;padding:1px 5px;color:var(--ink-2)}
+.dl{font-size:11px;color:var(--ink-2)}
+.dl.big{color:var(--crit);font-weight:600}
+.chip.al{border-color:var(--crit);background:var(--crit-bg);color:var(--crit)}
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--line)}
+.tab{background:none;border:0;border-bottom:2px solid transparent;padding:8px 14px;font-weight:500;color:var(--ink-3);margin-bottom:-1px}
+.tab:hover{color:var(--ink)}
+.tab[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--accent)}
+tr.detail>td{background:var(--bg);padding:14px 0;white-space:normal;text-align:left;position:static;max-width:none}
+tr.detail .dgrid{padding:0 12px}
+tr.err td{color:var(--crit)}
+.dwrap{position:sticky;left:0;width:calc(100vw - 2*max(16px,env(safe-area-inset-left,0px)) - 2px);max-width:1150px}
+@supports (width:1cqw){.dwrap{width:100cqw;max-width:none}}
+
+/* Detalle */
+.dgrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.box{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:14px;min-width:0}
+.box h3{margin-bottom:8px}
+.conds{list-style:none;margin:8px 0 0;padding:0;display:flex;flex-direction:column;gap:6px}
+.conds li{display:flex;gap:8px;align-items:flex-start;font-size:13px}
+.conds .v{margin-left:auto;font-family:var(--mono);font-size:12px;color:var(--ink-2);white-space:nowrap;padding-left:8px}
+.verdict{display:flex;gap:8px;align-items:center;font-weight:600;margin-bottom:4px}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:4px 14px;font-size:13px}
+.kv dt{color:var(--ink-3)} .kv dd{margin:0;text-align:right;font-family:var(--mono);font-size:12px}
+.mini{width:100%;border-collapse:collapse;min-width:0;font-size:12px}
+.mini th,.mini td{padding:4px 6px;border-bottom:1px solid var(--line);text-align:right;position:static;background:none;text-transform:none;letter-spacing:0;font-size:12px}
+.mini th{color:var(--ink-3);font-weight:500}
+.mini th:first-child,.mini td:first-child{text-align:left;min-width:0;max-width:none;white-space:normal}
+.bar2{display:flex;flex-direction:column;gap:2px;min-width:90px}
+.bar2 i{display:block;height:4px;border-radius:2px;background:var(--accent)}
+.bar2 i.b{background:var(--series-b)}
+svg.ch{width:100%;height:auto;display:block;overflow:visible}
+svg.ch text{font-family:var(--sans);font-size:11px;fill:var(--ink-3)}
+svg.ch text.v{fill:var(--ink);font-weight:500}
+svg.ch .grid{stroke:var(--line);stroke-width:1}
+svg.ch .axis{stroke:var(--ink-3);stroke-width:1}
+.group>.tablewrap>table>thead th{position:sticky;top:0;z-index:3;border-bottom:1px solid var(--line)}
+.group>.tablewrap>table>thead th:first-child{z-index:5}
+@media (min-width:1040px){.group>.tablewrap:not(.cscroll){overflow:clip}}
+@media (max-width:1039px){.group>.tablewrap:not(.cscroll){max-height:80vh;overflow:auto}}
+.cscroll{max-height:75vh;overflow:auto}
+.cscroll th{position:sticky;top:0;z-index:3;border-bottom:1px solid var(--line)}
+.cscroll th:first-child{z-index:5}
+.glos{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:12px 16px}
+.glos summary{font-weight:600;cursor:pointer}
+.glos dl{display:grid;grid-template-columns:minmax(150px,220px) 1fr;gap:6px 16px;margin:10px 0;font-size:13px}
+.glos dt{font-weight:600}.glos dd{margin:0;color:var(--ink-2)}
+@media (max-width:640px){.glos dl{grid-template-columns:1fr}.glos dd{margin-bottom:6px}}
+.rule label:has(select){flex-direction:column;align-items:stretch;gap:6px}
+.rule .sw{justify-content:flex-start;gap:8px;cursor:pointer}
+.rule .sw input{width:16px;height:16px;accent-color:var(--accent)}
+.sugg{display:flex;gap:14px;align-items:flex-start;background:var(--surface);border:1px solid var(--line);border-left:4px solid var(--accent);border-radius:8px;padding:14px 16px}
+.sugg p{margin:0 0 4px;font-size:14px}.sugg .note{font-size:12px;margin:4px 0 0}
+.stag{flex:none;background:var(--accent);color:var(--accent-ink);font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;padding:3px 8px;border-radius:4px}
+.rule select{padding:6px 8px;font:inherit;border:1px solid var(--line);border-radius:6px;background:var(--surface);color:var(--ink);max-width:100%}
+@media (max-width:640px){.sugg{flex-direction:column;gap:8px}}
+.win{margin-top:14px;padding-top:12px;border-top:1px solid var(--line)}
+.win h3{font-size:13px;margin:0 0 6px}
+.win .hb{grid-template-columns:minmax(0,170px) 1fr 74px}
+.win .hv{white-space:nowrap}
+.win .note{margin-top:6px}
+.cmph{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:10px}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:6px;overflow:hidden}
+.segb{background:var(--surface);border:0;padding:6px 12px;font-size:13px;color:var(--ink-2);cursor:pointer}
+.segb+.segb{border-left:1px solid var(--line)}
+.segb[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink)}
+.hgrp{margin-top:14px}.hgrp h3{font-size:13px;margin:0 0 6px}
+.hb{display:grid;grid-template-columns:minmax(120px,230px) 1fr 70px;gap:10px;align-items:center;padding:3px 0;font-size:13px}
+.hn{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ht{background:color-mix(in srgb,var(--line) 45%,transparent);border-radius:3px;height:14px;display:block;overflow:hidden}
+.ht i{display:block;height:100%;background:var(--accent);border-radius:3px}
+.hv{text-align:right}
+.hb.infl .hn{font-weight:600;color:var(--warn)}
+.hb.infl .hv{font-weight:600}
+@media (max-width:640px){.hb{grid-template-columns:minmax(0,1fr) 70px}.hb .ht{grid-column:1/3;grid-row:2}}
+.legend{display:flex;gap:14px;font-size:12px;color:var(--ink-2);margin-bottom:6px;flex-wrap:wrap}
+.legend i{display:inline-block;width:14px;height:3px;border-radius:2px;margin-right:6px;vertical-align:3px}
+.note{font-size:12px;color:var(--ink-3);margin-top:8px}
+
+/* Criterios */
+details.crit{background:var(--surface);border:1px solid var(--line);border-radius:8px}
+details.crit>summary{padding:14px 16px;cursor:pointer;font-weight:600;list-style:none;display:flex;gap:8px;align-items:center}
+details.crit>summary::-webkit-details-marker{display:none}
+details.crit>summary::before{content:"";width:8px;height:8px;border-right:2px solid var(--ink-3);border-bottom:2px solid var(--ink-3);transform:rotate(-45deg);transition:transform .15s}
+details.crit[open]>summary::before{transform:rotate(45deg)}
+.rules{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;padding:0 16px 16px}
+.rule{border:1px solid var(--line);border-radius:6px;padding:12px;display:flex;flex-direction:column;gap:6px}
+.rule h3{color:var(--ink)}
+.rule p{font-size:12px;color:var(--ink-3)}
+.rule label{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:12px;color:var(--ink-2)}
+.rule input{width:84px;font:inherit;font-family:var(--mono);font-size:12px;padding:3px 6px;border:1px solid var(--line);border-radius:4px;background:var(--bg);color:var(--ink);text-align:right}
+.rule .ro{font-family:var(--mono);font-size:12px}
+
+/* Estados */
+.skel{height:14px;border-radius:4px;background:linear-gradient(90deg,var(--surface-2),var(--line),var(--surface-2));background-size:200% 100%;animation:sh 1.2s linear infinite}
+@keyframes sh{to{background-position:-200% 0}}
+@media (prefers-reduced-motion:reduce){.skel{animation:none}}
+.empty{padding:28px 20px;text-align:left}
+.empty h2{margin-bottom:6px}
+.banner{border:1px solid var(--warn);background:var(--warn-bg);color:var(--warn);border-radius:6px;padding:10px 12px;font-size:13px}
+.banner.crit{border-color:var(--crit);background:var(--crit-bg);color:var(--crit)}
+footer.foot{font-size:12px;color:var(--ink-3);display:flex;flex-direction:column;gap:4px}
+
+@media (max-width:860px){
+  .summary{grid-template-columns:minmax(0,1fr)}
+  .dgrid{grid-template-columns:minmax(0,1fr)}
+}
+@media (max-width:420px){
+  .tiles{grid-template-columns:minmax(0,1fr)}
+}
+</style></head><body><div id="app" class="wrap"></div><script>window.__SNAPSHOT__={"version":1,"generatedAt":"2026-10-23T14:19:59.967Z","cfg":{"pctPeor":75,"flujoRojo":-10,"compRojo":20,"staleRojo":7,"tamChico":50000000000,"tamGrande":500000000000,"revisarMin":3,"patMin":20,"pref":"","soloT1":1,"usaTam":1,"usaAlarmas":1,"usaSost":1,"usaInfl":1},"tasas":{"fecha":"2026-10-23","caucion":{"tna":0.201,"tea":0.222557,"fecha":"2026-10-23"},"tamar":{"tna":0.2438,"tea":0.275985,"fecha":"2026-10-20"},"ccl":{"valor":1638.7,"fecha":"2026-10-23"},"oficial":{"valor":1526.67,"fecha":"2026-10-21"},"brechaCclOficial":0.073382},"otros":{"gen":"2026-10-23T14:20:18.605Z","evaluados":36,"total":53,"cands":[{"base":"Consultatio Renta Nacional","fondo":"Consultatio Renta Nacional - Clase B","clase":"B","d30":2.2196,"d90":6.5634,"ytd":29.9941,"pat":103739549406.77,"gestora":"One618 (ex Consultatio)","fees":2.115,"plazo":1},{"base":"Premier Renta Fija Ahorro","fondo":"Premier Renta Fija Ahorro - Clase C","clase":"C","d30":2.1723,"d90":6.3599,"ytd":26.5615,"pat":288419017042.33,"gestora":"Supervielle","fees":2.0999999999999996,"plazo":1},{"base":"Delta Ahorro Plus","fondo":"Delta Ahorro Plus - Clase B","clase":"B","d30":2.6502,"d90":6.3588,"ytd":27.171,"pat":64414865019.63,"gestora":"Delta","fees":2.5908,"plazo":1},{"base":"First Renta Pesos","fondo":"First Renta Pesos - Clase B","clase":"B","d30":2.141,"d90":6.3575,"ytd":25.637,"pat":4003453688.4100003,"gestora":"First","fees":1.65,"plazo":1},{"base":"Fundcorp Performance","fondo":"Fundcorp Performance - Clase C","clase":"C","d30":2.2651,"d90":6.3219,"ytd":26.8426,"pat":26863463400.529995,"gestora":"CMF","fees":1,"plazo":1},{"base":"Chaco Abierto Ahorro","fondo":"Chaco Abierto Ahorro - Clase A","clase":"A","d30":2.4291,"d90":6.2946,"ytd":26.1628,"pat":24663976020.61,"gestora":"Chaco","fees":2.25,"plazo":1},{"base":"Fundcorp Performance Balanceado","fondo":"Fundcorp Performance Balanceado - Clase C","clase":"C","d30":2.3862,"d90":6.2893,"ytd":28.2582,"pat":18760506350.72,"gestora":"CMF","fees":2,"plazo":1},{"base":"Pionero Capital","fondo":"Pionero Capital - Clase B","clase":"B","d30":2.4761,"d90":6.2513,"ytd":29.4057,"pat":30216829915.820004,"gestora":"Macro","fees":2.4000000000000004,"plazo":2},{"base":"Adcap Financiamiento Megra","fondo":"Adcap Financiamiento Megra - Clase B","clase":"B","d30":2.0354,"d90":6.1799,"ytd":26.2409,"pat":34337185938.79,"gestora":"Adcap","fees":1.661,"plazo":2},{"base":"Lombard Ahorro Plus","fondo":"Lombard Ahorro Plus - Clase A","clase":"A","d30":1.8073,"d90":6.1774,"ytd":30.9114,"pat":31623261434.31,"gestora":"Patagonia","fees":0.4,"plazo":1},{"base":"1822 Raices Renta en Pesos","fondo":"1822 Raices Renta en Pesos","clase":null,"d30":2.0172,"d90":6.1494,"ytd":26.3153,"pat":79663423336.16,"gestora":"Provinfondos","fees":2.3000000000000003,"plazo":1},{"base":"Toronto Trust Renta Fija","fondo":"Toronto Trust Renta Fija - Clase B","clase":"B","d30":2.2474,"d90":6.0755,"ytd":25.3104,"pat":80750562482.15999,"gestora":"Investis","fees":2.45,"plazo":1},{"base":"MAF Ahorro","fondo":"MAF Ahorro","clase":null,"d30":2.3747,"d90":6.046,"ytd":26.9593,"pat":11381465500.04,"gestora":"Mariva","fees":2.2199999999999998,"plazo":1},{"base":"Argenfunds Ahorro Pesos","fondo":"Argenfunds Ahorro Pesos - Clase B","clase":"B","d30":2.0031,"d90":6.0275,"ytd":24.5675,"pat":1519808368.6699998,"gestora":"Argenfunds","fees":2.25,"plazo":1},{"base":"ConoSur Ahorro","fondo":"ConoSur Ahorro - Clase C","clase":"C","d30":2.156,"d90":5.9882,"ytd":27.1006,"pat":24224538365.600002,"gestora":"ConoSur","fees":1.95,"plazo":1},{"base":"FBA Renta Fija Pesos II","fondo":"FBA Renta Fija Pesos II - Clase B3","clase":"B3","d30":2.0827,"d90":5.9766,"ytd":null,"pat":243449889745.31,"gestora":"BBVA","fees":1.7,"plazo":1},{"base":"Pionero FF","fondo":"Pionero FF - Clase B","clase":"B","d30":1.9165,"d90":5.9577,"ytd":null,"pat":58924345379.45,"gestora":"Macro","fees":2,"plazo":1},{"base":"BAVSA Pesos Plus","fondo":"BAVSA Pesos Plus - Clase C","clase":"C","d30":2.3731,"d90":5.9283,"ytd":null,"pat":25538831009.14,"gestora":"BAVSA","fees":1.2,"plazo":1},{"base":"MP Ahorro","fondo":"MP Ahorro - Clase C","clase":"C","d30":1.9429,"d90":5.9232,"ytd":null,"pat":347896235145.15,"gestora":"Mercado Pago","fees":1.51,"plazo":1},{"base":"Novus Gestion II","fondo":"Novus Gestion II - Clase B","clase":"B","d30":2.5903,"d90":5.8869,"ytd":27.7211,"pat":2193968491.68,"gestora":"Novus","fees":2.35,"plazo":1},{"base":"Lombard Ahorro Plus II","fondo":"Lombard Ahorro Plus II - Clase A","clase":"A","d30":1.8988,"d90":5.8765,"ytd":25.4883,"pat":5548029516.99,"gestora":"Patagonia","fees":0.8,"plazo":1},{"base":"SBS Gestion Renta Fija","fondo":"SBS Gestion Renta Fija - Clase B","clase":"B","d30":1.9776,"d90":5.8673,"ytd":25.1602,"pat":97958879821.4,"gestora":"SBS","fees":2.1,"plazo":1},{"base":"CMA Proteccion","fondo":"CMA Proteccion - Clase B","clase":"B","d30":1.9683,"d90":5.8507,"ytd":24.4046,"pat":10047707651.949999,"gestora":"Capital Markets Argentina","fees":2.634,"plazo":1},{"base":"Allaria Ahorro Plus","fondo":"Allaria Ahorro Plus - Clase C","clase":"C","d30":1.9054,"d90":5.8219,"ytd":22.3673,"pat":254999266111.31998,"gestora":"Allaria","fees":2.14,"plazo":1},{"base":"Champaquí Ahorro Pesos","fondo":"Champaquí Ahorro Pesos - Clase C","clase":"C","d30":1.9079,"d90":5.7806,"ytd":23.372,"pat":128441928419.81999,"gestora":"Bancor","fees":2.25,"plazo":1},{"base":"IAM Renta Crecimiento","fondo":"IAM Renta Crecimiento - Clase B","clase":"B","d30":2.001,"d90":5.7637,"ytd":24.4599,"pat":130828114190.72,"gestora":"BIND","fees":2.1199999999999997,"plazo":0},{"base":"MAF Pesos Plus","fondo":"MAF Pesos Plus - Clase C","clase":"C","d30":1.8662,"d90":5.7627,"ytd":24.0764,"pat":50107074694.70999,"gestora":"Mariva","fees":2.1799999999999997,"plazo":1},{"base":"MEGAQM Ahorro","fondo":"MEGAQM Ahorro - Clase B","clase":"B","d30":2.0321,"d90":5.7563,"ytd":29.734,"pat":72285894843.73,"gestora":"MegaQM","fees":2.301,"plazo":1},{"base":"IOL Cash Management","fondo":"IOL Cash Management - Clase A","clase":"A","d30":1.9382,"d90":5.7419,"ytd":null,"pat":159124900674.61,"gestora":"Adcap","fees":2.661,"plazo":2},{"base":"Alpha Ahorro","fondo":"Alpha Ahorro - Clase A","clase":"A","d30":1.9787,"d90":5.6676,"ytd":23.6227,"pat":219970425444.79996,"gestora":"ICBC","fees":2.405,"plazo":1},{"base":"Champaquí Renta Pesos","fondo":"Champaquí Renta Pesos - Clase B","clase":"B","d30":2.2393,"d90":5.6437,"ytd":28.3737,"pat":19079904705.24,"gestora":"Bancor","fees":2.5,"plazo":1},{"base":"BM Smart Corto Plazo","fondo":"BM Smart Corto Plazo - Clase B","clase":"B","d30":1.8842,"d90":5.6238,"ytd":24.6995,"pat":12598952753.32,"gestora":"Bull Market","fees":1.95,"plazo":1},{"base":"Lombard Capital","fondo":"Lombard Capital","clase":null,"d30":1.8116,"d90":5.5567,"ytd":22.4874,"pat":129178297380.52,"gestora":"Patagonia","fees":2.8000000000000003,"plazo":1},{"base":"Ualintec Renta Fija Pesos","fondo":"Ualintec Renta Fija Pesos - Clase C","clase":"C","d30":2.6615,"d90":5.5561,"ytd":28.2659,"pat":4161981883.66,"gestora":"Ualintec","fees":1.35,"plazo":1},{"base":"Consultatio Diamante Plus","fondo":"Consultatio Diamante Plus - Clase D","clase":"D","d30":1.9688,"d90":5.5453,"ytd":24.8972,"pat":24492553608.289997,"gestora":"One618 (ex Consultatio)","fees":0.6468,"plazo":1},{"base":"Galileo Ahorro Plus","fondo":"Galileo Ahorro Plus - Clase B","clase":"B","d30":2.4736,"d90":5.5171,"ytd":30.8141,"pat":32302535129.489998,"gestora":"Delta","fees":2.121,"plazo":1}]},"bundles":[{"name":"Fima Premium - Clase B","fetchedAt":"2026-10-23T14:19:38.193Z","ficha":{"gestora":"Galicia","subcategoria":"MONEY MARKET ARS CLASICO","clase":"B","categoria":"MERCADO DE DINERO","fecha":"2026-10-21","patrimonio":4620715097594.18,"calificacion":"AA+.ar","fee_gestion":1.7425,"fee_depositaria":0.3075,"gastos_gestion":0,"plazo_rescate":0,"rend_30d":1.5575,"rend_30d_dias":30,"rend_90d":4.8313,"rend_ytd":17.7274,"rend_1y":23.471},"patrimonio":{"total":9377959767951.049,"n":4,"clases":[{"fondo":"Fima Premium - Clase B","patrimonio":4620715097594.18,"fecha":"2026-10-21","incluida":true},{"fondo":"Fima Premium - Clase A","patrimonio":3660442297337.69,"fecha":"2026-10-21","incluida":true},{"fondo":"Fima Premium - Clase C","patrimonio":870183778306.62,"fecha":"2026-10-21","incluida":true},{"fondo":"Fima Premium - Clase N","patrimonio":226618594712.56,"fecha":"2026-10-21","incluida":true},{"fondo":"Fima Premium - Clase P","patrimonio":26298522849,"fecha":"2026-06-23","incluida":false}]},"peers":{"lastDate":"2026-10-21","n":56,"series":{"fund":[{"f":"2026-04-23","v":81525.64},{"f":"2026-05-08","v":82098.16},{"f":"2026-05-21","v":82615.62},{"f":"2026-06-08","v":83367.99},{"f":"2026-06-19","v":83762.72},{"f":"2026-07-07","v":84482.7},{"f":"2026-07-23","v":85165.36},{"f":"2026-08-04","v":85662.88},{"f":"2026-08-14","v":86093.5},{"f":"2026-08-27","v":86678.69},{"f":"2026-09-08","v":87206.65},{"f":"2026-09-18","v":87653.08},{"f":"2026-09-30","v":88189.5},{"f":"2026-10-13","v":88781.71},{"f":"2026-10-21","v":89153.5}],"cat":[{"f":"2026-04-29","v":82275.28},{"f":"2026-05-12","v":82819.28},{"f":"2026-05-22","v":83225.32},{"f":"2026-06-04","v":83753.79},{"f":"2026-06-17","v":84278.7},{"f":"2026-06-29","v":84775.4},{"f":"2026-07-13","v":85349.12},{"f":"2026-07-23","v":85763.25},{"f":"2026-08-04","v":86276.58},{"f":"2026-08-14","v":86717.75},{"f":"2026-08-27","v":87317.21},{"f":"2026-09-08","v":87862.89},{"f":"2026-09-18","v":88322.99},{"f":"2026-09-30","v":88884.84},{"f":"2026-10-13","v":89496},{"f":"2026-10-22","v":89922.34}]},"returns":[{"p":"1m","fund":1.56,"med":1.64,"pct":78,"rank":39,"n":50},{"p":"3m","fund":4.68,"med":4.83,"pct":70,"rank":35,"n":50},{"p":"ytd","fund":17.41,"med":17.65,"pct":66,"rank":31,"n":47},{"p":"1y","fund":23.47,"med":23.76,"pct":64,"rank":31,"n":48}],"monthly":[{"m":"2026-06","fund":1.49,"med":1.56,"pct":68,"rank":32,"n":47,"mtd":false},{"m":"2026-07","fund":1.53,"med":1.52,"pct":48,"rank":23,"n":47,"mtd":false},{"m":"2026-08","fund":1.59,"med":1.62,"pct":67,"rank":33,"n":49,"mtd":false},{"m":"2026-09","fund":1.54,"med":1.59,"pct":76,"rank":38,"n":50,"mtd":false},{"m":"2026-10","fund":1.09,"med":1.11,"pct":60,"rank":30,"n":50,"mtd":true}]},"comp":{"hasPrev":true,"prevSnapshot":"2026-09","divergente":false,"rows":[{"tipo":"Plazo Fijo","pct":64.77,"med":60.31,"prev":60.31,"delta":4.46},{"tipo":"Liquidez","pct":26.6,"med":20.66,"prev":29.99,"delta":-3.39},{"tipo":"Caución","pct":8.61,"med":15.34,"prev":9.64,"delta":-1.03},{"tipo":"Tasa Fija ARS","pct":0,"med":24.86,"prev":0,"delta":0},{"tipo":"CER","pct":0,"med":15.89,"prev":0,"delta":0},{"tipo":"Dual TAMAR/Fija","pct":0,"med":15.42,"prev":0,"delta":0},{"tipo":"Pagarés, Cheques y Facturas","pct":0,"med":12.99,"prev":0,"delta":0},{"tipo":"TAMAR / Flotante","pct":0,"med":9.76,"prev":0,"delta":0},{"tipo":"Provincial ARS","pct":0,"med":7.82,"prev":0,"delta":0}]},"vol":{"d90":0.02641354314436348,"d365":0.297313774710688,"ret90":20.394252349108278,"n90":62,"n365":222,"last":"2026-10-21"},"ytdInfl":{"desde":"2025-12-30","hasta":"2026-09-30","pct":16.454482340217226},"flows":{"desde":"2026-09-23","hasta":"2026-10-23","flujo":-69591356470.83704}},{"name":"FBA Money Market Pesos - Clase B","fetchedAt":"2026-10-23T14:19:38.197Z","ficha":{"gestora":"BBVA","subcategoria":"MONEY MARKET ARS CLASICO","clase":"B","categoria":"MERCADO DE DINERO","fecha":"2026-10-22","patrimonio":3595178521676.82,"calificacion":"AAAf.ar","fee_gestion":1.979,"fee_depositaria":0.121,"gastos_gestion":0,"plazo_rescate":0,"rend_30d":1.5486,"rend_30d_dias":30,"rend_90d":4.7721,"rend_ytd":17.9513,"rend_1y":23.7447},"patrimonio":{"total":4082948913493.27,"n":4,"clases":[{"fondo":"FBA Money Market Pesos - Clase B","patrimonio":3595178521676.82,"fecha":"2026-10-22","incluida":true},{"fondo":"FBA Money Market Pesos - Clase A","patrimonio":487639172311.68,"fecha":"2026-10-22","incluida":true},{"fondo":"FBA Money Market Pesos - Clase J Ley Nº 27.743","patrimonio":127844706.72,"fecha":"2026-10-22","incluida":true},{"fondo":"FBA Money Market Pesos - Clase K Ley Nº 27.743","patrimonio":3374798.05,"fecha":"2026-10-22","incluida":true}]},"peers":{"lastDate":"2026-10-22","n":56,"series":{"fund":[{"f":"2026-04-22","v":13025.06},{"f":"2026-04-27","v":13058.38},{"f":"2026-04-30","v":13078.47},{"f":"2026-05-06","v":13118.77},{"f":"2026-05-11","v":13151.1},{"f":"2026-05-14","v":13170.22},{"f":"2026-05-19","v":13202.21},{"f":"2026-05-22","v":13221.16},{"f":"2026-05-28","v":13259.29},{"f":"2026-06-02","v":13291.27},{"f":"2026-06-05","v":13310.28},{"f":"2026-06-10","v":13341.84},{"f":"2026-06-16","v":13379.36},{"f":"2026-06-19","v":13398.29},{"f":"2026-06-24","v":13429.71},{"f":"2026-06-29","v":13463.36},{"f":"2026-07-02","v":13482.91},{"f":"2026-07-07","v":13514.27},{"f":"2026-07-14","v":13559.52},{"f":"2026-07-17","v":13579.02},{"f":"2026-07-22","v":13611.35},{"f":"2026-07-27","v":13643.97},{"f":"2026-07-30","v":13663.38},{"f":"2026-08-04","v":13697.25},{"f":"2026-08-07","v":13717.62},{"f":"2026-08-12","v":13752},{"f":"2026-08-18","v":13793.96},{"f":"2026-08-21","v":13815.95},{"f":"2026-08-26","v":13851.45},{"f":"2026-08-31","v":13886.64},{"f":"2026-09-03","v":13907.9},{"f":"2026-09-08","v":13943.67},{"f":"2026-09-11","v":13965.28},{"f":"2026-09-16","v":14000.75},{"f":"2026-09-21","v":14036.28},{"f":"2026-09-24","v":14057.72},{"f":"2026-09-29","v":14093.73},{"f":"2026-10-02","v":14115.99},{"f":"2026-10-07","v":14152.28},{"f":"2026-10-13","v":14195.69},{"f":"2026-10-16","v":14217.51},{"f":"2026-10-21","v":14253.74},{"f":"2026-10-22","v":14260.9}],"cat":[{"f":"2026-04-22","v":12989.29},{"f":"2026-04-27","v":13022.49},{"f":"2026-04-30","v":13042.61},{"f":"2026-05-06","v":13083.24},{"f":"2026-05-11","v":13115.72},{"f":"2026-05-14","v":13134.94},{"f":"2026-05-19","v":13167.04},{"f":"2026-05-22","v":13186.46},{"f":"2026-05-28","v":13225.13},{"f":"2026-06-02","v":13257.43},{"f":"2026-06-05","v":13276.55},{"f":"2026-06-10","v":13308.39},{"f":"2026-06-16","v":13346.77},{"f":"2026-06-19","v":13366.18},{"f":"2026-06-24","v":13398.24},{"f":"2026-06-29","v":13432.06},{"f":"2026-07-02","v":13451.55},{"f":"2026-07-07","v":13483.49},{"f":"2026-07-14","v":13529.78},{"f":"2026-07-17","v":13549.28},{"f":"2026-07-22","v":13582},{"f":"2026-07-27","v":13615.13},{"f":"2026-07-30","v":13635.11},{"f":"2026-08-04","v":13669.91},{"f":"2026-08-07","v":13690.79},{"f":"2026-08-12","v":13725.59},{"f":"2026-08-18","v":13768.86},{"f":"2026-08-21","v":13791.33},{"f":"2026-08-26","v":13827.66},{"f":"2026-08-31","v":13862.97},{"f":"2026-09-03","v":13884.72},{"f":"2026-09-08","v":13921.25},{"f":"2026-09-11","v":13943.18},{"f":"2026-09-16","v":13979.53},{"f":"2026-09-21","v":14016.23},{"f":"2026-09-24","v":14038.47},{"f":"2026-09-29","v":14075.52},{"f":"2026-10-02","v":14098.64},{"f":"2026-10-07","v":14135.36},{"f":"2026-10-13","v":14180.01},{"f":"2026-10-16","v":14202.62},{"f":"2026-10-21","v":14239.96},{"f":"2026-10-22","v":14247.56}]},"returns":[{"p":"1m","fund":1.55,"med":1.59,"pct":68,"rank":34,"n":50},{"p":"3m","fund":4.67,"med":4.78,"pct":66,"rank":33,"n":50},{"p":"ytd","fund":17.65,"med":17.65,"pct":51,"rank":24,"n":47},{"p":"1y","fund":23.74,"med":23.66,"pct":45,"rank":22,"n":48}],"monthly":[{"m":"2026-06","fund":1.54,"med":1.56,"pct":57,"rank":27,"n":47,"mtd":false},{"m":"2026-07","fund":1.48,"med":1.52,"pct":68,"rank":32,"n":47,"mtd":false},{"m":"2026-08","fund":1.58,"med":1.62,"pct":71,"rank":35,"n":49,"mtd":false},{"m":"2026-09","fund":1.54,"med":1.59,"pct":72,"rank":36,"n":50,"mtd":false},{"m":"2026-10","fund":1.13,"med":1.17,"pct":71,"rank":33,"n":46,"mtd":true}]},"comp":{"hasPrev":true,"prevSnapshot":"2026-09","divergente":false,"rows":[{"tipo":"Plazo Fijo","pct":66.2,"med":60.31,"prev":61.82,"delta":4.38},{"tipo":"Liquidez","pct":27.18,"med":20.66,"prev":31.07,"delta":-3.89},{"tipo":"Caución","pct":6.57,"med":15.34,"prev":7.03,"delta":-0.46},{"tipo":"Tasa Fija ARS","pct":0,"med":24.86,"prev":0,"delta":0},{"tipo":"CER","pct":0,"med":15.89,"prev":0,"delta":0},{"tipo":"Dual TAMAR/Fija","pct":0,"med":15.42,"prev":0,"delta":0},{"tipo":"Pagarés, Cheques y Facturas","pct":0,"med":12.99,"prev":0,"delta":0},{"tipo":"TAMAR / Flotante","pct":0,"med":9.76,"prev":0,"delta":0},{"tipo":"Provincial ARS","pct":0,"med":7.82,"prev":0,"delta":0}]},"vol":{"d90":0.024224860284651033,"d365":0.2696727275069934,"ret90":20.34375258468839,"n90":63,"n365":239,"last":"2026-10-22"},"ytdInfl":{"desde":"2025-12-30","hasta":"2026-09-30","pct":16.629217232724834},"flows":{"desde":"2026-09-23","hasta":"2026-10-23","flujo":-161527914692.7481}},{"name":"Delta Pesos - Clase B","fetchedAt":"2026-10-23T14:19:37.990Z","ficha":{"gestora":"Delta","subcategoria":"MONEY MARKET ARS CLASICO","clase":"B","categoria":"MERCADO DE DINERO","fecha":"2026-10-22","patrimonio":615351162972.66,"calificacion":"AAAf (arg)","fee_gestion":2,"fee_depositaria":0.0847,"gastos_gestion":0,"plazo_rescate":0,"rend_30d":1.5534,"rend_30d_dias":30,"rend_90d":4.782,"rend_ytd":17.3242,"rend_1y":22.9111},"patrimonio":{"total":1139166930967.2698,"n":5,"clases":[{"fondo":"Delta Pesos - Clase B","patrimonio":615351162972.66,"fecha":"2026-10-22","incluida":true},{"fondo":"Delta Pesos - Clase X","patrimonio":372146418324.31,"fecha":"2026-10-22","incluida":true},{"fondo":"Delta Pesos - Clase D","patrimonio":72979049904.39,"fecha":"2026-10-22","incluida":true},{"fondo":"Delta Pesos - Clase A","patrimonio":72132817483.76,"fecha":"2026-10-22","incluida":true},{"fondo":"Delta Pesos - Clase M","patrimonio":6557482282.15,"fecha":"2026-10-22","incluida":true},{"fondo":"Delta Pesos - Clase K Ley Nº 27.743","patrimonio":1205737,"fecha":"2026-05-28","incluida":false}]},"peers":{"lastDate":"2026-10-22","n":56,"series":{"fund":[{"f":"2026-04-29","v":83095.67},{"f":"2026-05-12","v":83626.13},{"f":"2026-05-22","v":84023.11},{"f":"2026-06-04","v":84542.31},{"f":"2026-06-17","v":85060.7},{"f":"2026-06-29","v":85555.39},{"f":"2026-07-13","v":86119.58},{"f":"2026-07-23","v":86528.43},{"f":"2026-08-04","v":87028.44},{"f":"2026-08-14","v":87458.65},{"f":"2026-08-27","v":88051.85},{"f":"2026-09-08","v":88597.23},{"f":"2026-09-18","v":89055.64},{"f":"2026-09-30","v":89601.98},{"f":"2026-10-13","v":90204.62},{"f":"2026-10-22","v":90623.35}],"cat":[{"f":"2026-04-29","v":82275.28},{"f":"2026-05-12","v":82819.28},{"f":"2026-05-22","v":83225.32},{"f":"2026-06-04","v":83753.79},{"f":"2026-06-17","v":84278.7},{"f":"2026-06-29","v":84775.4},{"f":"2026-07-13","v":85349.12},{"f":"2026-07-23","v":85763.25},{"f":"2026-08-04","v":86276.58},{"f":"2026-08-14","v":86717.75},{"f":"2026-08-27","v":87317.21},{"f":"2026-09-08","v":87862.89},{"f":"2026-09-18","v":88322.99},{"f":"2026-09-30","v":88884.84},{"f":"2026-10-13","v":89496},{"f":"2026-10-22","v":89922.34}]},"returns":[{"p":"1m","fund":1.55,"med":1.59,"pct":64,"rank":32,"n":50},{"p":"3m","fund":4.68,"med":4.78,"pct":64,"rank":32,"n":50},{"p":"ytd","fund":17.08,"med":17.65,"pct":72,"rank":34,"n":47},{"p":"1y","fund":22.91,"med":23.66,"pct":71,"rank":34,"n":48}],"monthly":[{"m":"2026-06","fund":1.54,"med":1.56,"pct":61,"rank":29,"n":47,"mtd":false},{"m":"2026-07","fund":1.47,"med":1.52,"pct":70,"rank":33,"n":47,"mtd":false},{"m":"2026-08","fund":1.58,"med":1.62,"pct":73,"rank":36,"n":49,"mtd":false},{"m":"2026-09","fund":1.55,"med":1.59,"pct":66,"rank":33,"n":50,"mtd":false},{"m":"2026-10","fund":1.14,"med":1.17,"pct":65,"rank":30,"n":46,"mtd":true}]},"comp":{"hasPrev":true,"prevSnapshot":"2026-09","divergente":false,"rows":[{"tipo":"Plazo Fijo","pct":69.23,"med":60.31,"prev":60.65,"delta":8.58},{"tipo":"Liquidez","pct":24.81,"med":20.66,"prev":29.96,"delta":-5.15},{"tipo":"Caución","pct":6,"med":15.34,"prev":9.41,"delta":-3.41},{"tipo":"Tasa Fija ARS","pct":0,"med":24.86,"prev":0,"delta":0},{"tipo":"CER","pct":0,"med":15.89,"prev":0,"delta":0},{"tipo":"Dual TAMAR/Fija","pct":0,"med":15.42,"prev":0,"delta":0},{"tipo":"Pagarés, Cheques y Facturas","pct":0,"med":12.99,"prev":0,"delta":0},{"tipo":"TAMAR / Flotante","pct":0,"med":9.76,"prev":0,"delta":0},{"tipo":"Provincial ARS","pct":0,"med":7.82,"prev":0,"delta":0}]},"vol":{"d90":0.028469139655141345,"d365":0.2420651867061374,"ret90":20.394153802647065,"n90":63,"n365":241,"last":"2026-10-22"},"ytdInfl":{"desde":"2025-12-30","hasta":"2026-09-30","pct":16.001930702650814},"flows":{"desde":"2026-09-23","hasta":"2026-10-23","flujo":-128509958911.44995}},{"name":"Argenfunds Liquidez - Clase B","fetchedAt":"2026-10-23T14:19:46.893Z","ficha":{"gestora":"Argenfunds","subcategoria":"MONEY MARKET ARS CLASICO","clase":"B","categoria":"MERCADO DE DINERO","fecha":"2026-10-22","patrimonio":162293851395.26,"calificacion":null,"fee_gestion":1.73,"fee_depositaria":0.25,"gastos_gestion":0,"plazo_rescate":0,"rend_30d":1.6029,"rend_30d_dias":30,"rend_90d":4.9008,"rend_ytd":17.8056,"rend_1y":23.3438},"patrimonio":{"total":162811782868.71,"n":3,"clases":[{"fondo":"Argenfunds Liquidez - Clase B","patrimonio":162293851395.26,"fecha":"2026-10-22","incluida":true},{"fondo":"Argenfunds Liquidez - Clase A","patrimonio":517904011.61,"fecha":"2026-10-22","incluida":true},{"fondo":"Argenfunds Liquidez - Clase G Ley N° 27.743","patrimonio":27461.84,"fecha":"2026-10-22","incluida":true}]},"peers":{"lastDate":"2026-10-22","n":56,"series":{"fund":[{"f":"2026-04-29","v":83188.75},{"f":"2026-05-12","v":83743.74},{"f":"2026-05-22","v":84153.94},{"f":"2026-06-04","v":84687.05},{"f":"2026-06-17","v":85216.41},{"f":"2026-06-29","v":85713.46},{"f":"2026-07-13","v":86281.9},{"f":"2026-07-23","v":86700.05},{"f":"2026-08-04","v":87219.96},{"f":"2026-08-14","v":87657.91},{"f":"2026-08-27","v":88260.84},{"f":"2026-09-08","v":88802.58},{"f":"2026-09-18","v":89280.59},{"f":"2026-09-30","v":89846.28},{"f":"2026-10-13","v":90470.29},{"f":"2026-10-22","v":90905.45}],"cat":[{"f":"2026-04-29","v":82275.28},{"f":"2026-05-12","v":82819.28},{"f":"2026-05-22","v":83225.32},{"f":"2026-06-04","v":83753.79},{"f":"2026-06-17","v":84278.7},{"f":"2026-06-29","v":84775.4},{"f":"2026-07-13","v":85349.12},{"f":"2026-07-23","v":85763.25},{"f":"2026-08-04","v":86276.58},{"f":"2026-08-14","v":86717.75},{"f":"2026-08-27","v":87317.21},{"f":"2026-09-08","v":87862.89},{"f":"2026-09-18","v":88322.99},{"f":"2026-09-30","v":88884.84},{"f":"2026-10-13","v":89496},{"f":"2026-10-22","v":89922.34}]},"returns":[{"p":"1m","fund":1.6,"med":1.59,"pct":41,"rank":21,"n":50},{"p":"3m","fund":4.8,"med":4.78,"pct":45,"rank":23,"n":50},{"p":"ytd","fund":17.55,"med":17.65,"pct":55,"rank":26,"n":47},{"p":"1y","fund":23.34,"med":23.66,"pct":66,"rank":32,"n":48}],"monthly":[{"m":"2026-06","fund":1.56,"med":1.56,"pct":46,"rank":22,"n":47,"mtd":false},{"m":"2026-07","fund":1.51,"med":1.52,"pct":57,"rank":27,"n":47,"mtd":false},{"m":"2026-08","fund":1.59,"med":1.62,"pct":69,"rank":34,"n":49,"mtd":false},{"m":"2026-09","fund":1.6,"med":1.59,"pct":41,"rank":21,"n":50,"mtd":false},{"m":"2026-10","fund":1.18,"med":1.17,"pct":45,"rank":21,"n":46,"mtd":true}]},"comp":{"hasPrev":true,"prevSnapshot":"2026-09","divergente":false,"rows":[{"tipo":"Plazo Fijo","pct":71.12,"med":60.31,"prev":67.01,"delta":4.11},{"tipo":"Liquidez","pct":20.98,"med":20.66,"prev":18.08,"delta":2.9},{"tipo":"Tasa Fija ARS","pct":0,"med":24.86,"prev":0,"delta":0},{"tipo":"CER","pct":0,"med":15.89,"prev":0,"delta":0},{"tipo":"Dual TAMAR/Fija","pct":0,"med":15.42,"prev":0,"delta":0},{"tipo":"Caución","pct":0,"med":15.34,"prev":4.97,"delta":-4.97},{"tipo":"Pagarés, Cheques y Facturas","pct":0,"med":12.99,"prev":0,"delta":0},{"tipo":"TAMAR / Flotante","pct":0,"med":9.76,"prev":0,"delta":0},{"tipo":"Provincial ARS","pct":0,"med":7.82,"prev":0,"delta":0}]},"vol":{"d90":0.03842567720074196,"d365":0.2414147290499363,"ret90":20.937481422883742,"n90":63,"n365":241,"last":"2026-10-22"},"ytdInfl":{"desde":"2025-12-30","hasta":"2026-09-30","pct":16.432959339202636},"flows":{"desde":"2026-09-23","hasta":"2026-10-23","flujo":-49996207688.05551}},{"name":"Fima Ahorro Pesos - Clase C","fetchedAt":"2026-10-23T14:19:45.056Z","ficha":{"gestora":"Galicia","subcategoria":"RENTA FIJA T+1","clase":"C","categoria":"RENTA FIJA","fecha":"2026-10-22","patrimonio":256862527322.74,"calificacion":"AAf.ar","fee_gestion":1.7,"fee_depositaria":0.3,"gastos_gestion":0,"plazo_rescate":1,"rend_30d":1.9821,"rend_30d_dias":30,"rend_90d":5.874,"rend_ytd":23.1827,"rend_1y":31.5051},"patrimonio":{"total":789413816392.01,"n":3,"clases":[{"fondo":"Fima Ahorro Pesos - Clase A","patrimonio":338049318236.76,"fecha":"2026-10-22","incluida":true},{"fondo":"Fima Ahorro Pesos - Clase C","patrimonio":256862527322.74,"fecha":"2026-10-22","incluida":true},{"fondo":"Fima Ahorro Pesos - Clase B","patrimonio":194501970832.51,"fecha":"2026-10-22","incluida":true}]},"peers":{"lastDate":"2026-10-22","n":28,"series":{"fund":[{"f":"2026-04-20","v":117155.63},{"f":"2026-04-30","v":117721.98},{"f":"2026-05-13","v":118697.52},{"f":"2026-05-26","v":119591.8},{"f":"2026-06-05","v":120509.01},{"f":"2026-06-18","v":121229.54},{"f":"2026-06-30","v":122126.73},{"f":"2026-07-14","v":123076.64},{"f":"2026-07-24","v":123870.54},{"f":"2026-08-06","v":124483.86},{"f":"2026-08-19","v":125149.02},{"f":"2026-09-01","v":126554.85},{"f":"2026-09-11","v":127464.32},{"f":"2026-09-23","v":128384.24},{"f":"2026-10-05","v":129482.07},{"f":"2026-10-16","v":130533.07},{"f":"2026-10-22","v":130881.43}],"cat":[{"f":"2026-04-29","v":108094.65},{"f":"2026-05-12","v":109341.9},{"f":"2026-05-22","v":110278.42},{"f":"2026-06-04","v":111025.89},{"f":"2026-06-17","v":111825.24},{"f":"2026-06-29","v":112588.45},{"f":"2026-07-13","v":113583.22},{"f":"2026-07-23","v":114274.1},{"f":"2026-08-04","v":114954.94},{"f":"2026-08-14","v":115710.29},{"f":"2026-08-27","v":116323.19},{"f":"2026-09-08","v":117454.77},{"f":"2026-09-18","v":118573.1},{"f":"2026-09-30","v":119247.2},{"f":"2026-10-13","v":120285.87},{"f":"2026-10-22","v":121022.7}]},"returns":[{"p":"1m","fund":1.98,"med":2.04,"pct":57,"rank":14,"n":24},{"p":"3m","fund":5.66,"med":5.8,"pct":66,"rank":16,"n":24},{"p":"ytd","fund":22.76,"med":24.56,"pct":70,"rank":19,"n":27},{"p":"1y","fund":31.51,"med":35.96,"pct":73,"rank":20,"n":27}],"monthly":[{"m":"2026-06","fund":1.75,"med":1.75,"pct":51,"rank":12,"n":23,"mtd":false},{"m":"2026-07","fund":1.7,"med":1.69,"pct":46,"rank":11,"n":23,"mtd":false},{"m":"2026-08","fund":1.83,"med":1.73,"pct":42,"rank":10,"n":23,"mtd":false},{"m":"2026-09","fund":2.03,"med":2.09,"pct":70,"rank":17,"n":24,"mtd":false},{"m":"2026-10","fund":1.43,"med":1.55,"pct":78,"rank":18,"n":23,"mtd":true}]},"comp":{"hasPrev":true,"prevSnapshot":"2026-09","divergente":false,"rows":[{"tipo":"Tasa Fija ARS","pct":63.33,"med":29.28,"prev":68.95,"delta":-5.62},{"tipo":"Corporativo USD","pct":12.55,"med":10.03,"prev":12.27,"delta":0.28},{"tipo":"Plazo Fijo","pct":11.63,"med":12.57,"prev":10.47,"delta":1.16},{"tipo":"TAMAR / Flotante","pct":5.07,"med":11.77,"prev":0.79,"delta":4.28},{"tipo":"CER","pct":3.41,"med":24.8,"prev":1.62,"delta":1.79},{"tipo":"MM FCI","pct":2.7,"med":1.76,"prev":3.86,"delta":-1.16},{"tipo":"Pagarés, Cheques y Facturas","pct":1.26,"med":8.02,"prev":2.28,"delta":-1.02},{"tipo":"Provincial ARS","pct":0.62,"med":2.28,"prev":0.63,"delta":-0.01},{"tipo":"Hard Dollar Soberano","pct":0,"med":19.35,"prev":0,"delta":0},{"tipo":"Dual TAMAR/DL","pct":0,"med":15.23,"prev":0,"delta":0},{"tipo":"Dollar Linked","pct":0,"med":11.25,"prev":0,"delta":0},{"tipo":"Dual TAMAR/Fija","pct":0,"med":7.42,"prev":0,"delta":0},{"tipo":"Dual CER/TAMAR","pct":0,"med":4.88,"prev":0,"delta":0},{"tipo":"Caución","pct":0,"med":4.21,"prev":0,"delta":0},{"tipo":"Hard Dollar Sub-soberano","pct":0,"med":1.67,"prev":0,"delta":0},{"tipo":"BOPREAL","pct":0,"med":1.27,"prev":0,"delta":0}]},"vol":{"d90":1.2761558697236373,"d365":1.736958662388237,"ret90":25.016802270826144,"n90":61,"n365":239,"last":"2026-10-22"},"ytdInfl":{"desde":"2025-12-30","hasta":"2026-09-30","pct":21.451032981121188},"flows":{"desde":"2026-09-23","hasta":"2026-10-23","flujo":-12808003301.464272}},{"name":"Gainvest FF - Clase B","fetchedAt":"2026-10-23T14:19:47.653Z","ficha":{"gestora":"StoneX","subcategoria":"RENTA FIJA T+1","clase":"B","categoria":"RENTA FIJA","fecha":"2026-10-22","patrimonio":166873423718.1,"calificacion":"AA-f(arg)","fee_gestion":2.5,"fee_depositaria":0.1452,"gastos_gestion":0,"plazo_rescate":1,"rend_30d":1.9464,"rend_30d_dias":30,"rend_90d":6.2008,"rend_ytd":24.7042,"rend_1y":33.9401},"patrimonio":{"total":194819003350.26,"n":3,"clases":[{"fondo":"Gainvest FF - Clase B","patrimonio":166873423718.1,"fecha":"2026-10-22","incluida":true},{"fondo":"Gainvest FF - Clase A","patrimonio":23626661228.22,"fecha":"2026-10-22","incluida":true},{"fondo":"Gainvest FF - Clase C","patrimonio":4318918403.94,"fecha":"2026-10-22","incluida":true}]},"peers":{"lastDate":"2026-10-22","n":59,"series":{"fund":[{"f":"2026-04-29","v":103058.01},{"f":"2026-05-12","v":103984.03},{"f":"2026-05-22","v":104682.6},{"f":"2026-06-04","v":105615.47},{"f":"2026-06-17","v":106477.65},{"f":"2026-06-29","v":107304.68},{"f":"2026-07-13","v":108270.42},{"f":"2026-07-23","v":108942.51},{"f":"2026-08-04","v":109809.66},{"f":"2026-08-14","v":110524.58},{"f":"2026-08-27","v":111517.65},{"f":"2026-09-08","v":112420.08},{"f":"2026-09-18","v":113134.45},{"f":"2026-09-30","v":114035.13},{"f":"2026-10-13","v":114980.93},{"f":"2026-10-22","v":115622.2}],"cat":[{"f":"2026-04-29","v":108546.68},{"f":"2026-05-12","v":109748.3},{"f":"2026-05-22","v":110656.5},{"f":"2026-06-04","v":111421.52},{"f":"2026-06-17","v":112243.43},{"f":"2026-06-29","v":112994.68},{"f":"2026-07-13","v":114003.83},{"f":"2026-07-23","v":114673.33},{"f":"2026-08-04","v":115291.34},{"f":"2026-08-14","v":116013.98},{"f":"2026-08-27","v":116640.12},{"f":"2026-09-08","v":117767.18},{"f":"2026-09-18","v":118874.08},{"f":"2026-09-30","v":119518.88},{"f":"2026-10-13","v":120540.07},{"f":"2026-10-22","v":121296.48}]},"returns":[{"p":"1m","fund":1.95,"med":1.99,"pct":72,"rank":39,"n":54},{"p":"3m","fund":6.05,"med":5.75,"pct":18,"rank":10,"n":54},{"p":"ytd","fund":24.32,"med":24.97,"pct":59,"rank":31,"n":52},{"p":"1y","fund":33.94,"med":35.17,"pct":65,"rank":34,"n":52}],"monthly":[{"m":"2026-06","fund":2.07,"med":1.74,"pct":9,"rank":5,"n":53,"mtd":false},{"m":"2026-07","fund":2,"med":1.69,"pct":5,"rank":3,"n":53,"mtd":false},{"m":"2026-08","fund":2.1,"med":1.73,"pct":5,"rank":3,"n":54,"mtd":false},{"m":"2026-09","fund":1.98,"med":2.13,"pct":78,"rank":42,"n":54,"mtd":false},{"m":"2026-10","fund":1.39,"med":1.53,"pct":81,"rank":43,"n":53,"mtd":true}]},"comp":{"hasPrev":true,"prevSnapshot":"2026-09","divergente":false,"rows":[{"tipo":"Otros","pct":44.32,"med":4.17,"prev":44.31,"delta":0.01},{"tipo":"Corporativo USD","pct":21.61,"med":10.03,"prev":19.32,"delta":2.29},{"tipo":"Caución","pct":12.11,"med":4.21,"prev":19.27,"delta":-7.16},{"tipo":"Pagarés, Cheques y Facturas","pct":10.04,"med":8.02,"prev":8.61,"delta":1.43},{"tipo":"Liquidez","pct":6.22,"med":0.09,"prev":3.35,"delta":2.87},{"tipo":"MM FCI","pct":4.67,"med":1.76,"prev":4.8,"delta":-0.13},{"tipo":"Provincial ARS","pct":1.03,"med":2.28,"prev":0.92,"delta":0.11},{"tipo":"Tasa Fija ARS","pct":0,"med":29.28,"prev":0,"delta":0},{"tipo":"CER","pct":0,"med":24.8,"prev":0,"delta":0},{"tipo":"Hard Dollar Soberano","pct":0,"med":19.35,"prev":0,"delta":0},{"tipo":"Dual TAMAR/DL","pct":0,"med":15.23,"prev":0,"delta":0},{"tipo":"Plazo Fijo","pct":0,"med":12.57,"prev":0,"delta":0},{"tipo":"TAMAR / Flotante","pct":0,"med":11.77,"prev":0,"delta":0},{"tipo":"Dollar Linked","pct":0,"med":11.25,"prev":0,"delta":0},{"tipo":"Dual TAMAR/Fija","pct":0,"med":7.42,"prev":0,"delta":0},{"tipo":"Dual CER/TAMAR","pct":0,"med":4.88,"prev":0,"delta":0},{"tipo":"Hard Dollar Sub-soberano","pct":0,"med":1.67,"prev":0,"delta":0},{"tipo":"BOPREAL","pct":0,"med":1.27,"prev":0,"delta":0}]},"vol":{"d90":0.07462964394033372,"d365":0.3833164794979933,"ret90":26.903783637578528,"n90":63,"n365":241,"last":"2026-10-22"},"ytdInfl":{"desde":"2025-12-30","hasta":"2026-09-30","pct":22.99251105575908},"flows":{"desde":"2026-09-23","hasta":"2026-10-23","flujo":-10845901776.260532}},{"name":"Max Ahorro Pesos - Clase B","fetchedAt":"2026-10-23T14:19:49.490Z","ficha":{"gestora":"Max Capital","subcategoria":"RENTA FIJA T+1","clase":"B","categoria":"RENTA FIJA","fecha":"2026-10-22","patrimonio":51648220147.53,"calificacion":"AA+f(arg)","fee_gestion":1.8,"fee_depositaria":0.13,"gastos_gestion":0,"plazo_rescate":1,"rend_30d":2.0653,"rend_30d_dias":30,"rend_90d":6.1706,"rend_ytd":31.4882,"rend_1y":48.017},"patrimonio":{"total":58356398056.15,"n":3,"clases":[{"fondo":"Max Ahorro Pesos - Clase B","patrimonio":51648220147.53,"fecha":"2026-10-22","incluida":true},{"fondo":"Max Ahorro Pesos - Clase A","patrimonio":6708175793.52,"fecha":"2026-10-22","incluida":true},{"fondo":"Max Ahorro Pesos - Clase E Ley N° 27.743","patrimonio":2115.1,"fecha":"2026-10-22","incluida":true}]},"peers":{"lastDate":"2026-10-22","n":59,"series":{"fund":[{"f":"2026-04-23","v":105114.42},{"f":"2026-05-05","v":105520.64},{"f":"2026-05-14","v":107074.87},{"f":"2026-05-26","v":108080.4},{"f":"2026-06-04","v":108385.42},{"f":"2026-06-16","v":109612.83},{"f":"2026-06-25","v":109876.56},{"f":"2026-07-06","v":111184.55},{"f":"2026-07-17","v":111900.02},{"f":"2026-07-28","v":112561.9},{"f":"2026-08-06","v":112620.32},{"f":"2026-08-18","v":112767.41},{"f":"2026-08-27","v":113789.79},{"f":"2026-09-08","v":115348.98},{"f":"2026-09-17","v":116503.71},{"f":"2026-09-28","v":116759.78},{"f":"2026-10-07","v":117885.29},{"f":"2026-10-19","v":118833.99},{"f":"2026-10-22","v":119100.79}],"cat":[{"f":"2026-04-23","v":65537.97},{"f":"2026-05-05","v":65881.79},{"f":"2026-05-14","v":66420.05},{"f":"2026-05-26","v":66921.29},{"f":"2026-06-04","v":67323.45},{"f":"2026-06-16","v":67809.03},{"f":"2026-06-25","v":68028.52},{"f":"2026-07-06","v":68682.31},{"f":"2026-07-17","v":69110.73},{"f":"2026-07-28","v":69466.32},{"f":"2026-08-06","v":69661.24},{"f":"2026-08-18","v":70038.77},{"f":"2026-08-27","v":70476.65},{"f":"2026-09-07","v":71116.94},{"f":"2026-09-16","v":71614.41},{"f":"2026-09-25","v":72024.04},{"f":"2026-10-06","v":72556.82},{"f":"2026-10-16","v":73090.74},{"f":"2026-10-22","v":73290.12}]},"returns":[{"p":"1m","fund":2.07,"med":1.99,"pct":38,"rank":21,"n":54},{"p":"3m","fund":5.94,"med":5.75,"pct":25,"rank":14,"n":54},{"p":"ytd","fund":30.96,"med":24.97,"pct":1,"rank":1,"n":52},{"p":"1y","fund":48.02,"med":35.17,"pct":3,"rank":2,"n":52}],"monthly":[{"m":"2026-06","fund":1.89,"med":1.74,"pct":28,"rank":15,"n":53,"mtd":false},{"m":"2026-07","fund":1.7,"med":1.69,"pct":49,"rank":26,"n":53,"mtd":false},{"m":"2026-08","fund":1.71,"med":1.73,"pct":53,"rank":29,"n":54,"mtd":false},{"m":"2026-09","fund":2.31,"med":2.13,"pct":22,"rank":12,"n":54,"mtd":false},{"m":"2026-10","fund":1.73,"med":1.53,"pct":22,"rank":12,"n":53,"mtd":true}]},"comp":{"hasPrev":true,"prevSnapshot":"2026-09","divergente":false,"rows":[{"tipo":"Tasa Fija ARS","pct":41.84,"med":29.28,"prev":44.07,"delta":-2.23},{"tipo":"CER","pct":41.09,"med":24.8,"prev":33.98,"delta":7.11},{"tipo":"Pagarés, Cheques y Facturas","pct":6.97,"med":8.02,"prev":7.04,"delta":-0.07},{"tipo":"MM FCI","pct":3.94,"med":1.76,"prev":4.25,"delta":-0.31},{"tipo":"TAMAR / Flotante","pct":3.75,"med":11.77,"prev":8.85,"delta":-5.1},{"tipo":"Caución","pct":1.78,"med":4.21,"prev":0,"delta":1.78},{"tipo":"Hard Dollar Soberano","pct":0,"med":19.35,"prev":0,"delta":0},{"tipo":"Dual TAMAR/DL","pct":0,"med":15.23,"prev":0,"delta":0},{"tipo":"Plazo Fijo","pct":0,"med":12.57,"prev":0,"delta":0},{"tipo":"Dollar Linked","pct":0,"med":11.25,"prev":0,"delta":0},{"tipo":"Corporativo USD","pct":0,"med":10.03,"prev":0,"delta":0},{"tipo":"Dual TAMAR/Fija","pct":0,"med":7.42,"prev":0,"delta":0},{"tipo":"Dual CER/TAMAR","pct":0,"med":4.88,"prev":0,"delta":0},{"tipo":"Provincial ARS","pct":0,"med":2.28,"prev":0,"delta":0},{"tipo":"Hard Dollar Sub-soberano","pct":0,"med":1.67,"prev":0,"delta":0},{"tipo":"BOPREAL","pct":0,"med":1.27,"prev":0,"delta":0}]},"vol":{"d90":2.4853216852876487,"d365":4.106100803399527,"ret90":26.37776137438228,"n90":62,"n365":240,"last":"2026-10-22"},"ytdInfl":{"desde":"2025-12-30","hasta":"2026-09-30","pct":29.24821374297619},"flows":{"desde":"2026-09-23","hasta":"2026-10-23","flujo":7198419008.221692}},{"name":"Schroder Renta Plus - Clase B","fetchedAt":"2026-10-23T14:19:50.906Z","ficha":{"gestora":"Schroder","subcategoria":"RENTA FIJA T+1","clase":"B","categoria":"RENTA FIJA","fecha":"2026-10-22","patrimonio":389577128141.04,"calificacion":"Aa-bf.ar","fee_gestion":2.25,"fee_depositaria":0.0968,"gastos_gestion":0,"plazo_rescate":1,"rend_30d":1.9546,"rend_30d_dias":30,"rend_90d":5.6024,"rend_ytd":30.0309,"rend_1y":44.1738},"patrimonio":{"total":414037536693.31,"n":3,"clases":[{"fondo":"Schroder Renta Plus - Clase B","patrimonio":389577128141.04,"fecha":"2026-10-22","incluida":true},{"fondo":"Schroder Renta Plus - Clase A","patrimonio":24452090771.14,"fecha":"2026-10-22","incluida":true},{"fondo":"Schroder Renta Plus - Clase E Ley N° 27.743","patrimonio":8317781.13,"fecha":"2026-10-22","incluida":true}]},"peers":{"lastDate":"2026-10-22","n":59,"series":{"fund":[{"f":"2026-04-29","v":204926.81},{"f":"2026-05-12","v":208067},{"f":"2026-05-22","v":210586.58},{"f":"2026-06-04","v":212257.94},{"f":"2026-06-17","v":213144.35},{"f":"2026-06-29","v":213936.01},{"f":"2026-07-13","v":216294.16},{"f":"2026-07-23","v":217707.89},{"f":"2026-08-04","v":218625.83},{"f":"2026-08-14","v":220247.05},{"f":"2026-08-27","v":220779.03},{"f":"2026-09-08","v":223218.04},{"f":"2026-09-18","v":225303.4},{"f":"2026-09-30","v":226734.74},{"f":"2026-10-13","v":228450.66},{"f":"2026-10-22","v":229812.87}],"cat":[{"f":"2026-04-29","v":108546.68},{"f":"2026-05-12","v":109748.3},{"f":"2026-05-22","v":110656.5},{"f":"2026-06-04","v":111421.52},{"f":"2026-06-17","v":112243.43},{"f":"2026-06-29","v":112994.68},{"f":"2026-07-13","v":114003.83},{"f":"2026-07-23","v":114673.33},{"f":"2026-08-04","v":115291.34},{"f":"2026-08-14","v":116013.98},{"f":"2026-08-27","v":116640.12},{"f":"2026-09-08","v":117767.18},{"f":"2026-09-18","v":118874.08},{"f":"2026-09-30","v":119518.88},{"f":"2026-10-13","v":120540.07},{"f":"2026-10-22","v":121296.48}]},"returns":[{"p":"1m","fund":1.95,"med":1.99,"pct":63,"rank":34,"n":54},{"p":"3m","fund":5.38,"med":5.75,"pct":79,"rank":43,"n":54},{"p":"ytd","fund":29.72,"med":24.97,"pct":7,"rank":4,"n":52},{"p":"1y","fund":44.17,"med":35.17,"pct":7,"rank":4,"n":52}],"monthly":[{"m":"2026-06","fund":1.23,"med":1.74,"pct":98,"rank":52,"n":53,"mtd":false},{"m":"2026-07","fund":1.91,"med":1.69,"pct":20,"rank":11,"n":53,"mtd":false},{"m":"2026-08","fund":1.47,"med":1.73,"pct":83,"rank":45,"n":54,"mtd":false},{"m":"2026-09","fund":2.32,"med":2.13,"pct":16,"rank":9,"n":54,"mtd":false},{"m":"2026-10","fund":1.36,"med":1.53,"pct":90,"rank":48,"n":53,"mtd":true}]},"comp":{"hasPrev":true,"prevSnapshot":"2026-09","divergente":false,"rows":[{"tipo":"CER","pct":53.48,"med":24.8,"prev":34.93,"delta":18.55},{"tipo":"Dual TAMAR/Fija","pct":22.86,"med":7.42,"prev":0,"delta":22.86},{"tipo":"Plazo Fijo","pct":15.92,"med":12.57,"prev":14.83,"delta":1.09},{"tipo":"Provincial ARS","pct":5.18,"med":2.28,"prev":0,"delta":5.18},{"tipo":"MM FCI","pct":4.47,"med":1.76,"prev":4.32,"delta":0.15},{"tipo":"Tasa Fija ARS","pct":0,"med":29.28,"prev":42.56,"delta":-42.56},{"tipo":"Hard Dollar Soberano","pct":0,"med":19.35,"prev":0,"delta":0},{"tipo":"Dual TAMAR/DL","pct":0,"med":15.23,"prev":0,"delta":0},{"tipo":"TAMAR / Flotante","pct":0,"med":11.77,"prev":0,"delta":0},{"tipo":"Dollar Linked","pct":0,"med":11.25,"prev":0,"delta":0},{"tipo":"Corporativo USD","pct":0,"med":10.03,"prev":0,"delta":0},{"tipo":"Pagarés, Cheques y Facturas","pct":0,"med":8.02,"prev":0,"delta":0},{"tipo":"Dual CER/TAMAR","pct":0,"med":4.88,"prev":0,"delta":0},{"tipo":"Caución","pct":0,"med":4.21,"prev":2.14,"delta":-2.14},{"tipo":"Hard Dollar Sub-soberano","pct":0,"med":1.67,"prev":0,"delta":0},{"tipo":"BOPREAL","pct":0,"med":1.27,"prev":0,"delta":0}]},"vol":{"d90":2.067984086365793,"d365":3.6764372670216914,"ret90":23.682936346369488,"n90":63,"n365":241,"last":"2026-10-22"},"ytdInfl":{"desde":"2025-12-30","hasta":"2026-09-30","pct":28.289296126715534},"flows":{"desde":"2026-09-23","hasta":"2026-10-23","flujo":-39817334368.78569}},{"name":"Pellegrini Renta Fija - Clase B","fetchedAt":"2026-10-23T14:19:51.994Z","ficha":{"gestora":"Nacion","subcategoria":"RENTA FIJA T+1","clase":"B","categoria":"RENTA FIJA","fecha":"2026-10-22","patrimonio":321182569729.37,"calificacion":"AA","fee_gestion":1.9,"fee_depositaria":0.6,"gastos_gestion":0,"plazo_rescate":1,"rend_30d":1.9561,"rend_30d_dias":30,"rend_90d":5.7104,"rend_ytd":22.6949,"rend_1y":32.0917},"patrimonio":{"total":360312699243.81,"n":2,"clases":[{"fondo":"Pellegrini Renta Fija - Clase B","patrimonio":321182569729.37,"fecha":"2026-10-22","incluida":true},{"fondo":"Pellegrini Renta Fija - Clase A","patrimonio":39130129514.44,"fecha":"2026-10-22","incluida":true}]},"peers":{"lastDate":"2026-10-22","n":59,"series":{"fund":[{"f":"2026-04-29","v":127966.66},{"f":"2026-05-12","v":129381.83},{"f":"2026-05-22","v":130508.9},{"f":"2026-06-04","v":131119.62},{"f":"2026-06-17","v":131790.52},{"f":"2026-06-29","v":132503.48},{"f":"2026-07-13","v":133602.9},{"f":"2026-07-23","v":134226.8},{"f":"2026-08-04","v":134976.52},{"f":"2026-08-14","v":135837.37},{"f":"2026-08-27","v":136626.22},{"f":"2026-09-08","v":137762.22},{"f":"2026-09-18","v":139042.53},{"f":"2026-09-30","v":139845.62},{"f":"2026-10-13","v":140985.23},{"f":"2026-10-22","v":141890.89}],"cat":[{"f":"2026-04-29","v":108546.68},{"f":"2026-05-12","v":109748.3},{"f":"2026-05-22","v":110656.5},{"f":"2026-06-04","v":111421.52},{"f":"2026-06-17","v":112243.43},{"f":"2026-06-29","v":112994.68},{"f":"2026-07-13","v":114003.83},{"f":"2026-07-23","v":114673.33},{"f":"2026-08-04","v":115291.34},{"f":"2026-08-14","v":116013.98},{"f":"2026-08-27","v":116640.12},{"f":"2026-09-08","v":117767.18},{"f":"2026-09-18","v":118874.08},{"f":"2026-09-30","v":119518.88},{"f":"2026-10-13","v":120540.07},{"f":"2026-10-22","v":121296.48}]},"returns":[{"p":"1m","fund":1.96,"med":1.99,"pct":59,"rank":32,"n":54},{"p":"3m","fund":5.54,"med":5.75,"pct":66,"rank":36,"n":54},{"p":"ytd","fund":22.36,"med":24.97,"pct":88,"rank":46,"n":52},{"p":"1y","fund":32.09,"med":35.17,"pct":86,"rank":45,"n":52}],"monthly":[{"m":"2026-06","fund":1.42,"med":1.74,"pct":90,"rank":48,"n":53,"mtd":false},{"m":"2026-07","fund":1.53,"med":1.69,"pct":77,"rank":41,"n":53,"mtd":false},{"m":"2026-08","fund":1.72,"med":1.73,"pct":51,"rank":28,"n":54,"mtd":false},{"m":"2026-09","fund":1.99,"med":2.13,"pct":76,"rank":41,"n":54,"mtd":false},{"m":"2026-10","fund":1.46,"med":1.53,"pct":66,"rank":35,"n":53,"mtd":true}]},"comp":{"hasPrev":true,"prevSnapshot":"2026-09","divergente":false,"rows":[{"tipo":"Tasa Fija ARS","pct":36.91,"med":29.28,"prev":42.41,"delta":-5.5},{"tipo":"Corporativo USD","pct":17.48,"med":10.03,"prev":14.82,"delta":2.66},{"tipo":"Plazo Fijo","pct":17.19,"med":12.57,"prev":19.43,"delta":-2.24},{"tipo":"Pagarés, Cheques y Facturas","pct":8.68,"med":8.02,"prev":7.82,"delta":0.86},{"tipo":"TAMAR / Flotante","pct":8.2,"med":11.77,"prev":3.46,"delta":4.74},{"tipo":"Caución","pct":1.72,"med":4.21,"prev":0.79,"delta":0.93},{"tipo":"MM FCI","pct":1.43,"med":1.76,"prev":2.67,"delta":-1.24},{"tipo":"CER","pct":1.28,"med":24.8,"prev":3.45,"delta":-2.17},{"tipo":"Provincial ARS","pct":0.46,"med":2.28,"prev":0.42,"delta":0.04},{"tipo":"Hard Dollar Soberano","pct":0,"med":19.35,"prev":0,"delta":0},{"tipo":"Dual TAMAR/DL","pct":0,"med":15.23,"prev":0,"delta":0},{"tipo":"Dollar Linked","pct":0,"med":11.25,"prev":0,"delta":0},{"tipo":"Dual TAMAR/Fija","pct":0,"med":7.42,"prev":0,"delta":0},{"tipo":"Dual CER/TAMAR","pct":0,"med":4.88,"prev":0,"delta":0},{"tipo":"Hard Dollar Sub-soberano","pct":0,"med":1.67,"prev":0,"delta":0},{"tipo":"BOPREAL","pct":0,"med":1.27,"prev":0,"delta":0}]},"vol":{"d90":1.3020922749798518,"d365":1.6415289658504824,"ret90":24.42980587380155,"n90":63,"n365":241,"last":"2026-10-22"},"ytdInfl":{"desde":"2025-12-30","hasta":"2026-09-30","pct":20.926280411749822},"flows":{"desde":"2026-09-23","hasta":"2026-10-23","flujo":-34741286450.35443}},{"name":"Fima Ahorro Plus - Clase C","fetchedAt":"2026-10-23T14:19:53.092Z","ficha":{"gestora":"Galicia","subcategoria":"RENTA FIJA T+1","clase":"C","categoria":"RENTA FIJA","fecha":"2026-10-22","patrimonio":331694946691.58,"calificacion":"Af.ar","fee_gestion":1.7,"fee_depositaria":0.3,"gastos_gestion":0,"plazo_rescate":1,"rend_30d":2.1959,"rend_30d_dias":30,"rend_90d":6.1747,"rend_ytd":25.8519,"rend_1y":35.9559},"patrimonio":{"total":818607458224.91,"n":4,"clases":[{"fondo":"Fima Ahorro Plus - Clase C","patrimonio":331694946691.58,"fecha":"2026-10-22","incluida":true},{"fondo":"Fima Ahorro Plus - Clase A","patrimonio":327769380063.08,"fecha":"2026-10-22","incluida":true},{"fondo":"Fima Ahorro Plus - Clase B","patrimonio":159133543530.15,"fecha":"2026-10-22","incluida":true},{"fondo":"Fima Ahorro Plus - Clase E","patrimonio":9587940.1,"fecha":"2026-10-22","incluida":true}]},"peers":{"lastDate":"2026-10-22","n":28,"series":{"fund":[{"f":"2026-04-20","v":120297.14},{"f":"2026-04-30","v":120498.52},{"f":"2026-05-13","v":121823.08},{"f":"2026-05-26","v":122857.04},{"f":"2026-06-05","v":123810.5},{"f":"2026-06-18","v":124496.35},{"f":"2026-06-30","v":125379.87},{"f":"2026-07-14","v":126348.07},{"f":"2026-07-24","v":127229.91},{"f":"2026-08-06","v":127680.8},{"f":"2026-08-19","v":128167.94},{"f":"2026-09-01","v":129795.37},{"f":"2026-09-11","v":130909.81},{"f":"2026-09-23","v":131896.55},{"f":"2026-10-05","v":133200.2},{"f":"2026-10-16","v":134314.1},{"f":"2026-10-22","v":134785.84}],"cat":[{"f":"2026-04-29","v":108094.65},{"f":"2026-05-12","v":109341.9},{"f":"2026-05-22","v":110278.42},{"f":"2026-06-04","v":111025.89},{"f":"2026-06-17","v":111825.24},{"f":"2026-06-29","v":112588.45},{"f":"2026-07-13","v":113583.22},{"f":"2026-07-23","v":114274.1},{"f":"2026-08-04","v":114954.94},{"f":"2026-08-14","v":115710.29},{"f":"2026-08-27","v":116323.19},{"f":"2026-09-08","v":117454.77},{"f":"2026-09-18","v":118573.1},{"f":"2026-09-30","v":119247.2},{"f":"2026-10-13","v":120285.87},{"f":"2026-10-22","v":121022.7}]},"returns":[{"p":"1m","fund":2.2,"med":2.04,"pct":27,"rank":7,"n":24},{"p":"3m","fund":5.94,"med":5.8,"pct":35,"rank":9,"n":24},{"p":"ytd","fund":25.48,"med":24.56,"pct":47,"rank":13,"n":27},{"p":"1y","fund":35.96,"med":35.96,"pct":51,"rank":14,"n":27}],"monthly":[{"m":"2026-06","fund":1.67,"med":1.75,"pct":69,"rank":16,"n":23,"mtd":false},{"m":"2026-07","fund":1.7,"med":1.69,"pct":42,"rank":10,"n":23,"mtd":false},{"m":"2026-08","fund":1.72,"med":1.73,"pct":55,"rank":13,"n":23,"mtd":false},{"m":"2026-09","fund":2.29,"med":2.09,"pct":35,"rank":9,"n":24,"mtd":false},{"m":"2026-10","fund":1.59,"med":1.55,"pct":42,"rank":10,"n":23,"mtd":true}]},"comp":{"hasPrev":true,"prevSnapshot":"2026-09","divergente":false,"rows":[{"tipo":"CER","pct":36.05,"med":24.8,"prev":39.43,"delta":-3.38},{"tipo":"Tasa Fija ARS","pct":34.12,"med":29.28,"prev":35.65,"delta":-1.53},{"tipo":"Corporativo USD","pct":11.81,"med":10.03,"prev":11.91,"delta":-0.1},{"tipo":"TAMAR / Flotante","pct":10.79,"med":11.77,"prev":3.57,"delta":7.22},{"tipo":"Plazo Fijo","pct":3.84,"med":12.57,"prev":5.3,"delta":-1.46},{"tipo":"MM FCI","pct":3.21,"med":1.76,"prev":4.01,"delta":-0.8},{"tipo":"Provincial ARS","pct":0.71,"med":2.28,"prev":0.74,"delta":-0.03},{"tipo":"Pagarés, Cheques y Facturas","pct":0.23,"med":8.02,"prev":0.43,"delta":-0.2},{"tipo":"Hard Dollar Soberano","pct":0,"med":19.35,"prev":0,"delta":0},{"tipo":"Dual TAMAR/DL","pct":0,"med":15.23,"prev":0,"delta":0},{"tipo":"Dollar Linked","pct":0,"med":11.25,"prev":0,"delta":0},{"tipo":"Dual TAMAR/Fija","pct":0,"med":7.42,"prev":0,"delta":0},{"tipo":"Dual CER/TAMAR","pct":0,"med":4.88,"prev":0,"delta":0},{"tipo":"Caución","pct":0,"med":4.21,"prev":0,"delta":0},{"tipo":"Hard Dollar Sub-soberano","pct":0,"med":1.67,"prev":0,"delta":0},{"tipo":"BOPREAL","pct":0,"med":1.27,"prev":0,"delta":0}]},"vol":{"d90":1.6974593707616736,"d365":2.357470798037336,"ret90":26.360742864977205,"n90":61,"n365":239,"last":"2026-10-22"},"ytdInfl":{"desde":"2025-12-30","hasta":"2026-09-30","pct":23.88669710732141},"flows":{"desde":"2026-09-23","hasta":"2026-10-23","flujo":35504792884.47236}},{"name":"Balanz Capital Ahorro - Clase D","fetchedAt":"2026-10-23T14:19:55.788Z","ficha":{"gestora":"Balanz","subcategoria":"RENTA FIJA T+1","clase":"D","categoria":"RENTA FIJA","fecha":"2026-10-22","patrimonio":116429661975.78,"calificacion":"AA+f(arg)","fee_gestion":1.65,"fee_depositaria":0.095,"gastos_gestion":0,"plazo_rescate":1,"rend_30d":2.1658,"rend_30d_dias":30,"rend_90d":6.4427,"rend_ytd":27.9526,"rend_1y":28.2857},"patrimonio":{"total":796222596117.6499,"n":5,"clases":[{"fondo":"Balanz Capital Ahorro - Clase A","patrimonio":457027746077.43,"fecha":"2026-10-22","incluida":true},{"fondo":"Balanz Capital Ahorro - Clase B","patrimonio":121932279923.53,"fecha":"2026-10-22","incluida":true},{"fondo":"Balanz Capital Ahorro - Clase D","patrimonio":116429661975.78,"fecha":"2026-10-22","incluida":true},{"fondo":"Balanz Capital Ahorro - Clase C","patrimonio":100830290785.96,"fecha":"2026-10-22","incluida":true},{"fondo":"Balanz Capital Ahorro - Clase L Ley Nº 27.743","patrimonio":2617354.95,"fecha":"2026-10-22","incluida":true}]},"peers":{"lastDate":"2026-10-22","n":8,"series":{"fund":[{"f":"2026-04-21","v":93515.76},{"f":"2026-05-04","v":93690.17},{"f":"2026-05-14","v":94844.37},{"f":"2026-05-27","v":95644.64},{"f":"2026-06-08","v":96404.27},{"f":"2026-06-19","v":97054.72},{"f":"2026-07-02","v":97760.93},{"f":"2026-07-16","v":98547.85},{"f":"2026-07-28","v":99248.18},{"f":"2026-08-07","v":99812.21},{"f":"2026-08-20","v":100363.6},{"f":"2026-09-01","v":101421.31},{"f":"2026-09-11","v":102309.59},{"f":"2026-09-23","v":103124.29},{"f":"2026-10-05","v":104079.26},{"f":"2026-10-16","v":105035.03},{"f":"2026-10-22","v":105341.06}],"cat":[{"f":"2026-04-20","v":10129.48},{"f":"2026-04-21","v":10129.45},{"f":"2026-04-22","v":10133.45},{"f":"2026-04-23","v":10128.47},{"f":"2026-04-24","v":10144.08},{"f":"2026-04-27","v":10143.47},{"f":"2026-04-28","v":10135.9},{"f":"2026-04-29","v":10134.76},{"f":"2026-04-30","v":10158.24},{"f":"2026-05-04","v":10178.78},{"f":"2026-05-05","v":10194.38},{"f":"2026-05-06","v":10210.68},{"f":"2026-05-07","v":10229.86},{"f":"2026-05-08","v":10253.34},{"f":"2026-05-11","v":10266.98},{"f":"2026-05-12","v":10275.43},{"f":"2026-05-13","v":10281.12},{"f":"2026-05-14","v":10291.17},{"f":"2026-05-15","v":10313.23},{"f":"2026-05-18","v":10320.24},{"f":"2026-05-19","v":10322.9},{"f":"2026-05-20","v":10330.15},{"f":"2026-05-21","v":10337.98},{"f":"2026-05-22","v":10363.75},{"f":"2026-05-26","v":10364.45},{"f":"2026-05-27","v":10368.28},{"f":"2026-05-28","v":10376.34},{"f":"2026-05-29","v":10402.48},{"f":"2026-06-01","v":10414.32},{"f":"2026-06-02","v":10413.95},{"f":"2026-06-03","v":10413.37},{"f":"2026-06-04","v":10426.28},{"f":"2026-06-05","v":10445.18},{"f":"2026-06-08","v":10452.41},{"f":"2026-06-09","v":10471.22},{"f":"2026-06-10","v":10476.01},{"f":"2026-06-11","v":10485.91},{"f":"2026-06-12","v":10497.34},{"f":"2026-06-16","v":10497.23},{"f":"2026-06-17","v":10496},{"f":"2026-06-18","v":10501.13},{"f":"2026-06-19","v":10519.92},{"f":"2026-06-22","v":10530.21},{"f":"2026-06-23","v":10529.15},{"f":"2026-06-24","v":10535.23},{"f":"2026-06-25","v":10533.54},{"f":"2026-06-26","v":10551.64},{"f":"2026-06-29","v":10577.67},{"f":"2026-06-30","v":10577.67},{"f":"2026-07-01","v":10586.41},{"f":"2026-07-02","v":10587.99},{"f":"2026-07-03","v":10612.59},{"f":"2026-07-06","v":10624.75},{"f":"2026-07-07","v":10625},{"f":"2026-07-08","v":10648.74},{"f":"2026-07-13","v":10656.28},{"f":"2026-07-14","v":10663.34},{"f":"2026-07-15","v":10672.06},{"f":"2026-07-16","v":10677.35},{"f":"2026-07-17","v":10694.3},{"f":"2026-07-20","v":10706.06},{"f":"2026-07-21","v":10714.28},{"f":"2026-07-22","v":10716.68},{"f":"2026-07-23","v":10720.53},{"f":"2026-07-24","v":10739.95},{"f":"2026-07-27","v":10748.57},{"f":"2026-07-28","v":10747.91},{"f":"2026-07-29","v":10755.38},{"f":"2026-07-30","v":10748.88},{"f":"2026-07-31","v":10770.7},{"f":"2026-08-03","v":10780.78},{"f":"2026-08-04","v":10786.89},{"f":"2026-08-05","v":10784.51},{"f":"2026-08-06","v":10785.9},{"f":"2026-08-07","v":10811.43},{"f":"2026-08-10","v":10822.75},{"f":"2026-08-11","v":10832.95},{"f":"2026-08-12","v":10838.96},{"f":"2026-08-13","v":10845.94},{"f":"2026-08-14","v":10866.07},{"f":"2026-08-18","v":10848.36},{"f":"2026-08-19","v":10833.06},{"f":"2026-08-20","v":10857.16},{"f":"2026-08-21","v":10882.47},{"f":"2026-08-24","v":10894.92},{"f":"2026-08-25","v":10898.73},{"f":"2026-08-26","v":10905},{"f":"2026-08-27","v":10916.07},{"f":"2026-08-28","v":10941.9},{"f":"2026-08-31","v":10959.26},{"f":"2026-09-01","v":10969.62},{"f":"2026-09-02","v":10978.41},{"f":"2026-09-03","v":10990.62},{"f":"2026-09-04","v":11009.62},{"f":"2026-09-07","v":11020.34},{"f":"2026-09-08","v":11026.71},{"f":"2026-09-09","v":11026.23},{"f":"2026-09-10","v":11034.49},{"f":"2026-09-11","v":11053.68},{"f":"2026-09-14","v":11075.01},{"f":"2026-09-15","v":11086.25},{"f":"2026-09-16","v":11094.8},{"f":"2026-09-17","v":11110.82},{"f":"2026-09-18","v":11124.03},{"f":"2026-09-21","v":11131.95},{"f":"2026-09-22","v":11136.21},{"f":"2026-09-23","v":11137.99},{"f":"2026-09-24","v":11145.31},{"f":"2026-09-25","v":11162.89},{"f":"2026-09-28","v":11167.47},{"f":"2026-09-29","v":11173.97},{"f":"2026-09-30","v":11190.27},{"f":"2026-10-01","v":11199.63},{"f":"2026-10-02","v":11225.33},{"f":"2026-10-05","v":11236.88},{"f":"2026-10-06","v":11243.8},{"f":"2026-10-07","v":11252.32},{"f":"2026-10-08","v":11258.76},{"f":"2026-10-09","v":11285.32},{"f":"2026-10-13","v":11293.61},{"f":"2026-10-14","v":11297.64},{"f":"2026-10-15","v":11308.82},{"f":"2026-10-16","v":11334.78},{"f":"2026-10-19","v":11343.03},{"f":"2026-10-20","v":11352.06},{"f":"2026-10-21","v":11360.68},{"f":"2026-10-22","v":11365.36}]},"returns":[{"p":"1m","fund":2.17,"med":2.05,"pct":21,"rank":2,"n":6},{"p":"3m","fund":6.22,"med":5.53,"pct":1,"rank":1,"n":6},{"p":"ytd","fund":27.56,"med":24.7,"pct":1,"rank":1,"n":7},{"p":"1y","fund":28.29,"med":28.29,"pct":51,"rank":4,"n":7}],"monthly":[{"m":"2026-06","fund":1.61,"med":1.62,"pct":67,"rank":3,"n":4,"mtd":false},{"m":"2026-07","fund":1.97,"med":1.78,"pct":34,"rank":2,"n":4,"mtd":false},{"m":"2026-08","fund":1.87,"med":1.62,"pct":1,"rank":1,"n":4,"mtd":false},{"m":"2026-09","fund":2.29,"med":2.29,"pct":51,"rank":3,"n":5,"mtd":false},{"m":"2026-10","fund":1.66,"med":1.5,"pct":1,"rank":1,"n":6,"mtd":true}]},"comp":{"hasPrev":true,"prevSnapshot":"2026-09","divergente":false,"rows":[{"tipo":"Tasa Fija ARS","pct":32.08,"med":29.28,"prev":17.88,"delta":14.2},{"tipo":"CER","pct":25.94,"med":24.8,"prev":38.06,"delta":-12.12},{"tipo":"Plazo Fijo","pct":20.17,"med":12.57,"prev":18.52,"delta":1.65},{"tipo":"Corporativo USD","pct":6.55,"med":10.03,"prev":6.36,"delta":0.19},{"tipo":"TAMAR / Flotante","pct":4.94,"med":11.77,"prev":9.06,"delta":-4.12},{"tipo":"Dual TAMAR/DL","pct":0.92,"med":15.23,"prev":0.93,"delta":-0.01},{"tipo":"MM FCI","pct":0.75,"med":1.76,"prev":0.91,"delta":-0.16},{"tipo":"Hard Dollar Soberano","pct":0,"med":19.35,"prev":0,"delta":0},{"tipo":"Dollar Linked","pct":0,"med":11.25,"prev":0,"delta":0},{"tipo":"Pagarés, Cheques y Facturas","pct":0,"med":8.02,"prev":0,"delta":0},{"tipo":"Dual TAMAR/Fija","pct":0,"med":7.42,"prev":0,"delta":0},{"tipo":"Dual CER/TAMAR","pct":0,"med":4.88,"prev":0,"delta":0},{"tipo":"Caución","pct":0,"med":4.21,"prev":0,"delta":0},{"tipo":"Provincial ARS","pct":0,"med":2.28,"prev":0,"delta":0},{"tipo":"Hard Dollar Sub-soberano","pct":0,"med":1.67,"prev":0,"delta":0},{"tipo":"BOPREAL","pct":0,"med":1.27,"prev":0,"delta":0}]},"vol":{"d90":1.5703437422103703,"d365":2.1687389727531947,"ret90":27.715313791663387,"n90":63,"n365":202,"last":"2026-10-22"},"ytdInfl":{"desde":"2025-12-30","hasta":"2026-09-30","pct":25.864462075578377},"flows":{"desde":"2026-09-23","hasta":"2026-10-23","flujo":17675567520.8302}},{"name":"Argenfunds Renta Mixta - Clase B","fetchedAt":"2026-10-23T14:19:55.599Z","ficha":{"gestora":"Argenfunds","subcategoria":"RENTA FIJA LECAP","clase":"B","categoria":"RENTA FIJA","fecha":"2026-10-22","patrimonio":71272861664.22,"calificacion":"AA","fee_gestion":1.9,"fee_depositaria":0.3509,"gastos_gestion":0,"plazo_rescate":0,"rend_30d":1.9953,"rend_30d_dias":30,"rend_90d":6.0386,"rend_ytd":24.9162,"rend_1y":34.4561},"patrimonio":{"total":71884909001.24,"n":2,"clases":[{"fondo":"Argenfunds Renta Mixta - Clase B","patrimonio":71272861664.22,"fecha":"2026-10-22","incluida":true},{"fondo":"Argenfunds Renta Mixta - Clase A","patrimonio":612047337.02,"fecha":"2026-10-22","incluida":true}]},"peers":{"lastDate":"2026-10-22","n":34,"series":{"fund":[{"f":"2026-04-29","v":389202.68},{"f":"2026-05-12","v":394710.7},{"f":"2026-05-22","v":397848.26},{"f":"2026-06-04","v":400047.81},{"f":"2026-06-17","v":402679.22},{"f":"2026-06-29","v":405426.67},{"f":"2026-07-13","v":408405.74},{"f":"2026-07-23","v":410772.21},{"f":"2026-08-04","v":413017.12},{"f":"2026-08-14","v":415575.83},{"f":"2026-08-27","v":418723.59},{"f":"2026-09-08","v":422894.69},{"f":"2026-09-18","v":426254.3},{"f":"2026-09-30","v":429445.57},{"f":"2026-10-13","v":432789.44},{"f":"2026-10-22","v":435552.24}],"cat":[{"f":"2026-04-29","v":96341.54},{"f":"2026-05-12","v":97282.3},{"f":"2026-05-22","v":98020.31},{"f":"2026-06-04","v":98860.98},{"f":"2026-06-17","v":99514.52},{"f":"2026-06-29","v":100115.61},{"f":"2026-07-13","v":100762.51},{"f":"2026-07-23","v":101258.42},{"f":"2026-08-04","v":101802.29},{"f":"2026-08-14","v":102351.39},{"f":"2026-08-27","v":103011.69},{"f":"2026-09-08","v":103888.69},{"f":"2026-09-18","v":104723.45},{"f":"2026-09-30","v":105278.36},{"f":"2026-10-13","v":106146.42},{"f":"2026-10-22","v":106703.47}]},"returns":[{"p":"1m","fund":2,"med":1.78,"pct":25,"rank":8,"n":30},{"p":"3m","fund":5.94,"med":5.13,"pct":8,"rank":3,"n":30},{"p":"ytd","fund":24.63,"med":21.28,"pct":20,"rank":6,"n":27},{"p":"1y","fund":34.46,"med":29.94,"pct":18,"rank":5,"n":24}],"monthly":[{"m":"2026-06","fund":1.58,"med":1.56,"pct":49,"rank":13,"n":26,"mtd":false},{"m":"2026-07","fund":1.54,"med":1.47,"pct":41,"rank":12,"n":28,"mtd":false},{"m":"2026-08","fund":2.04,"med":1.66,"pct":12,"rank":4,"n":29,"mtd":false},{"m":"2026-09","fund":2.14,"med":1.82,"pct":15,"rank":5,"n":29,"mtd":false},{"m":"2026-10","fund":1.42,"med":1.35,"pct":31,"rank":9,"n":27,"mtd":true}]},"comp":{"hasPrev":true,"prevSnapshot":"2026-09","divergente":false,"rows":[{"tipo":"Tasa Fija ARS","pct":33.55,"med":65.55,"prev":44.94,"delta":-11.39},{"tipo":"Dual TAMAR/Fija","pct":29.65,"med":15.55,"prev":27.95,"delta":1.7},{"tipo":"CER","pct":24.17,"med":11.64,"prev":21.11,"delta":3.06},{"tipo":"TAMAR / Flotante","pct":5.69,"med":8.71,"prev":0,"delta":5.69},{"tipo":"MM FCI","pct":4.9,"med":3.23,"prev":4.27,"delta":0.63},{"tipo":"Dual CER/TAMAR","pct":1.93,"med":2.5,"prev":1.83,"delta":0.1},{"tipo":"Caución","pct":0.19,"med":2.74,"prev":0,"delta":0.19},{"tipo":"Hard Dollar Soberano","pct":0,"med":18.84,"prev":0,"delta":0},{"tipo":"Bancos / Finanzas","pct":0,"med":17,"prev":0,"delta":0},{"tipo":"Energía / O&G","pct":0,"med":15.5,"prev":0,"delta":0},{"tipo":"Dollar Linked","pct":0,"med":14.22,"prev":0,"delta":0},{"tipo":"Plazo Fijo","pct":0,"med":12.84,"prev":0,"delta":0},{"tipo":"Corporativo USD","pct":0,"med":8.69,"prev":0,"delta":0},{"tipo":"Pagarés, Cheques y Facturas","pct":0,"med":8.2,"prev":0,"delta":0},{"tipo":"Utilities","pct":0,"med":4.63,"prev":0,"delta":0},{"tipo":"Futuros","pct":0,"med":4.59,"prev":0,"delta":0},{"tipo":"Materiales / Industria","pct":0,"med":3.16,"prev":0,"delta":0},{"tipo":"Dual TAMAR/DL","pct":0,"med":3.14,"prev":0,"delta":0},{"tipo":"Provincial ARS","pct":0,"med":3.1,"prev":0,"delta":0}]},"vol":{"d90":1.0901373796188916,"d365":2.1942859571403726,"ret90":26.3515612233294,"n90":63,"n365":241,"last":"2026-10-22"},"ytdInfl":{"desde":"2025-12-30","hasta":"2026-09-30","pct":23.16477138706732},"flows":{"desde":"2026-09-23","hasta":"2026-10-23","flujo":15495094532.189756}},{"name":"Pionero Renta Ahorro - Clase B","fetchedAt":"2026-10-23T14:19:58.323Z","ficha":{"gestora":"Macro","subcategoria":"RENTA FIJA T+1","clase":"B","categoria":"RENTA FIJA","fecha":"2026-10-22","patrimonio":251789811243.21,"calificacion":"AA (arg) v","fee_gestion":1.845,"fee_depositaria":0.205,"gastos_gestion":0,"plazo_rescate":1,"rend_30d":1.9428,"rend_30d_dias":30,"rend_90d":6.0542,"rend_ytd":23.6375,"rend_1y":33.1403},"patrimonio":{"total":294378253077.01,"n":2,"clases":[{"fondo":"Pionero Renta Ahorro - Clase B","patrimonio":251789811243.21,"fecha":"2026-10-22","incluida":true},{"fondo":"Pionero Renta Ahorro - Clase A","patrimonio":42588441833.8,"fecha":"2026-10-22","incluida":true}]},"peers":{"lastDate":"2026-10-22","n":59,"series":{"fund":[{"f":"2026-04-20","v":109250.44},{"f":"2026-04-30","v":109832.83},{"f":"2026-05-13","v":110674.32},{"f":"2026-05-27","v":111616.73},{"f":"2026-06-08","v":112462.59},{"f":"2026-06-19","v":113297.56},{"f":"2026-07-02","v":114017.61},{"f":"2026-07-16","v":114925.31},{"f":"2026-07-28","v":115745.39},{"f":"2026-08-07","v":116466.87},{"f":"2026-08-20","v":117165.94},{"f":"2026-09-01","v":118154.14},{"f":"2026-09-11","v":119119.76},{"f":"2026-09-23","v":120012.84},{"f":"2026-10-05","v":120983.46},{"f":"2026-10-16","v":121994.2},{"f":"2026-10-22","v":122314.09}],"cat":[{"f":"2026-04-29","v":108546.68},{"f":"2026-05-12","v":109748.3},{"f":"2026-05-22","v":110656.5},{"f":"2026-06-04","v":111421.52},{"f":"2026-06-17","v":112243.43},{"f":"2026-06-29","v":112994.68},{"f":"2026-07-13","v":114003.83},{"f":"2026-07-23","v":114673.33},{"f":"2026-08-04","v":115291.34},{"f":"2026-08-14","v":116013.98},{"f":"2026-08-27","v":116640.12},{"f":"2026-09-08","v":117767.18},{"f":"2026-09-18","v":118874.08},{"f":"2026-09-30","v":119518.88},{"f":"2026-10-13","v":120540.07},{"f":"2026-10-22","v":121296.48}]},"returns":[{"p":"1m","fund":1.94,"med":1.99,"pct":74,"rank":40,"n":54},{"p":"3m","fund":5.8,"med":5.75,"pct":38,"rank":21,"n":54},{"p":"ytd","fund":23.33,"med":24.97,"pct":75,"rank":39,"n":52},{"p":"1y","fund":33.14,"med":35.17,"pct":75,"rank":39,"n":52}],"monthly":[{"m":"2026-06","fund":1.72,"med":1.74,"pct":52,"rank":28,"n":53,"mtd":false},{"m":"2026-07","fund":1.89,"med":1.69,"pct":28,"rank":15,"n":53,"mtd":false},{"m":"2026-08","fund":1.8,"med":1.73,"pct":36,"rank":20,"n":54,"mtd":false},{"m":"2026-09","fund":2.2,"med":2.13,"pct":44,"rank":24,"n":54,"mtd":false},{"m":"2026-10","fund":1.36,"med":1.53,"pct":89,"rank":47,"n":53,"mtd":true}]},"comp":{"hasPrev":true,"prevSnapshot":"2026-09","divergente":false,"rows":[{"tipo":"Corporativo USD","pct":45.85,"med":10.03,"prev":46.76,"delta":-0.91},{"tipo":"Tasa Fija ARS","pct":28.45,"med":29.28,"prev":29.42,"delta":-0.97},{"tipo":"Plazo Fijo","pct":13.54,"med":12.57,"prev":13.67,"delta":-0.13},{"tipo":"Pagarés, Cheques y Facturas","pct":6.35,"med":8.02,"prev":6.07,"delta":0.28},{"tipo":"TAMAR / Flotante","pct":4.7,"med":11.77,"prev":0,"delta":4.7},{"tipo":"MM FCI","pct":0.86,"med":1.76,"prev":2.02,"delta":-1.16},{"tipo":"Provincial ARS","pct":0.7,"med":2.28,"prev":0.71,"delta":-0.01},{"tipo":"CER","pct":0,"med":24.8,"prev":0,"delta":0},{"tipo":"Hard Dollar Soberano","pct":0,"med":19.35,"prev":0,"delta":0},{"tipo":"Dual TAMAR/DL","pct":0,"med":15.23,"prev":0,"delta":0},{"tipo":"Dollar Linked","pct":0,"med":11.25,"prev":0,"delta":0},{"tipo":"Dual TAMAR/Fija","pct":0,"med":7.42,"prev":0,"delta":0},{"tipo":"Dual CER/TAMAR","pct":0,"med":4.88,"prev":0,"delta":0},{"tipo":"Caución","pct":0,"med":4.21,"prev":0,"delta":0},{"tipo":"Hard Dollar Sub-soberano","pct":0,"med":1.67,"prev":0,"delta":0},{"tipo":"BOPREAL","pct":0,"med":1.27,"prev":0,"delta":0}]},"vol":{"d90":1.2301691668151375,"d365":1.8699461065650784,"ret90":25.681575717913162,"n90":63,"n365":238,"last":"2026-10-22"},"ytdInfl":{"desde":"2025-12-30","hasta":"2026-09-30","pct":21.97864589686609},"flows":{"desde":"2026-09-23","hasta":"2026-10-23","flujo":5076424479.313888}},{"name":"Supergestion Mix VI - Clase B","fetchedAt":"2026-10-23T14:19:59.962Z","ficha":{"gestora":"Santander","subcategoria":"RENTA FIJA T+1","clase":"B","categoria":"RENTA FIJA","fecha":"2026-10-22","patrimonio":81230191891.45,"calificacion":"AAf(arg)","fee_gestion":1.0679,"fee_depositaria":1.1822,"gastos_gestion":0,"plazo_rescate":1,"rend_30d":2.0447,"rend_30d_dias":30,"rend_90d":6.1208,"rend_ytd":26.275,"rend_1y":37.2195},"patrimonio":{"total":1172171808321.9998,"n":5,"clases":[{"fondo":"Supergestion Mix VI - Clase A","patrimonio":966715364991.69,"fecha":"2026-10-22","incluida":true},{"fondo":"Supergestion Mix VI - Clase I","patrimonio":112410232690.59,"fecha":"2026-10-22","incluida":true},{"fondo":"Supergestion Mix VI - Clase B","patrimonio":81230191891.45,"fecha":"2026-10-22","incluida":true},{"fondo":"Supergestion Mix VI - Clase H","patrimonio":11391002066.39,"fecha":"2026-10-22","incluida":true},{"fondo":"Supergestion Mix VI - Clase J Ley N° 27.743","patrimonio":425016681.88,"fecha":"2026-10-22","incluida":true}]},"peers":{"lastDate":"2026-10-22","n":59,"series":{"fund":[{"f":"2026-04-29","v":121133.62},{"f":"2026-05-12","v":122657.18},{"f":"2026-05-22","v":123698.57},{"f":"2026-06-04","v":124524.81},{"f":"2026-06-17","v":125474.7},{"f":"2026-06-29","v":126317.81},{"f":"2026-07-13","v":127400.7},{"f":"2026-07-23","v":128142.83},{"f":"2026-08-04","v":128786.45},{"f":"2026-08-14","v":129768.58},{"f":"2026-08-27","v":130431.34},{"f":"2026-09-08","v":131791.22},{"f":"2026-09-18","v":133173.26},{"f":"2026-09-30","v":133864.54},{"f":"2026-10-13","v":134987.43},{"f":"2026-10-22","v":135922.68}],"cat":[{"f":"2026-04-29","v":108546.68},{"f":"2026-05-12","v":109748.3},{"f":"2026-05-22","v":110656.5},{"f":"2026-06-04","v":111421.52},{"f":"2026-06-17","v":112243.43},{"f":"2026-06-29","v":112994.68},{"f":"2026-07-13","v":114003.83},{"f":"2026-07-23","v":114673.33},{"f":"2026-08-04","v":115291.34},{"f":"2026-08-14","v":116013.98},{"f":"2026-08-27","v":116640.12},{"f":"2026-09-08","v":117767.18},{"f":"2026-09-18","v":118874.08},{"f":"2026-09-30","v":119518.88},{"f":"2026-10-13","v":120540.07},{"f":"2026-10-22","v":121296.48}]},"returns":[{"p":"1m","fund":2.04,"med":1.99,"pct":40,"rank":22,"n":54},{"p":"3m","fund":5.93,"med":5.75,"pct":27,"rank":15,"n":54},{"p":"ytd","fund":25.99,"med":24.97,"pct":28,"rank":15,"n":52},{"p":"1y","fund":37.22,"med":35.17,"pct":36,"rank":19,"n":52}],"monthly":[{"m":"2026-06","fund":1.77,"med":1.74,"pct":45,"rank":24,"n":53,"mtd":false},{"m":"2026-07","fund":1.64,"med":1.69,"pct":66,"rank":35,"n":53,"mtd":false},{"m":"2026-08","fund":1.88,"med":1.73,"pct":22,"rank":12,"n":54,"mtd":false},{"m":"2026-09","fund":2.22,"med":2.13,"pct":38,"rank":21,"n":54,"mtd":false},{"m":"2026-10","fund":1.54,"med":1.53,"pct":49,"rank":26,"n":53,"mtd":true}]},"comp":{"hasPrev":true,"prevSnapshot":"2026-09","divergente":false,"rows":[{"tipo":"CER","pct":38.1,"med":24.8,"prev":54,"delta":-15.9},{"tipo":"Plazo Fijo","pct":19.8,"med":12.57,"prev":10.23,"delta":9.57},{"tipo":"Tasa Fija ARS","pct":18.66,"med":29.28,"prev":16.22,"delta":2.44},{"tipo":"TAMAR / Flotante","pct":17,"med":11.77,"prev":13.21,"delta":3.79},{"tipo":"Corporativo USD","pct":5.92,"med":10.03,"prev":6.02,"delta":-0.1},{"tipo":"MM FCI","pct":1.61,"med":1.76,"prev":0.87,"delta":0.74},{"tipo":"Hard Dollar Soberano","pct":0,"med":19.35,"prev":0,"delta":0},{"tipo":"Dual TAMAR/DL","pct":0,"med":15.23,"prev":0,"delta":0},{"tipo":"Dollar Linked","pct":0,"med":11.25,"prev":0,"delta":0},{"tipo":"Pagarés, Cheques y Facturas","pct":0,"med":8.02,"prev":0,"delta":0},{"tipo":"Dual TAMAR/Fija","pct":0,"med":7.42,"prev":0,"delta":0},{"tipo":"Dual CER/TAMAR","pct":0,"med":4.88,"prev":0,"delta":0},{"tipo":"Caución","pct":0,"med":4.21,"prev":0,"delta":0},{"tipo":"Provincial ARS","pct":0,"med":2.28,"prev":0,"delta":0},{"tipo":"Hard Dollar Sub-soberano","pct":0,"med":1.67,"prev":0,"delta":0},{"tipo":"BOPREAL","pct":0,"med":1.27,"prev":0,"delta":0}]},"vol":{"d90":1.5485299448385863,"d365":2.278048133876824,"ret90":26.304511659084074,"n90":63,"n365":241,"last":"2026-10-22"},"ytdInfl":{"desde":"2025-12-30","hasta":"2026-09-30","pct":24.362955237451487},"flows":{"desde":"2026-09-23","hasta":"2026-10-23","flujo":1440142446.8408074}},{"name":"Delta Ahorro - Clase B","fetchedAt":"2026-10-23T14:19:57.863Z","ficha":{"gestora":"Delta","subcategoria":"RENTA FIJA T+1","clase":"B","categoria":"RENTA FIJA","fecha":"2026-10-22","patrimonio":249560101957.09,"calificacion":"AAf","fee_gestion":2.5,"fee_depositaria":0.0908,"gastos_gestion":0,"plazo_rescate":1,"rend_30d":1.8215,"rend_30d_dias":30,"rend_90d":5.7558,"rend_ytd":22.2518,"rend_1y":33.9074},"patrimonio":{"total":328920385401.93,"n":2,"clases":[{"fondo":"Delta Ahorro - Clase B","patrimonio":249560101957.09,"fecha":"2026-10-22","incluida":true},{"fondo":"Delta Ahorro - Clase A","patrimonio":79360283444.84,"fecha":"2026-10-22","incluida":true}]},"peers":{"lastDate":"2026-10-22","n":59,"series":{"fund":[{"f":"2026-04-29","v":94583.84},{"f":"2026-05-12","v":95339.74},{"f":"2026-05-22","v":95892.3},{"f":"2026-06-04","v":96674.01},{"f":"2026-06-17","v":97371.44},{"f":"2026-06-29","v":98081.22},{"f":"2026-07-13","v":98862.43},{"f":"2026-07-23","v":99437.01},{"f":"2026-08-04","v":100066.18},{"f":"2026-08-14","v":100609.27},{"f":"2026-08-27","v":101355.1},{"f":"2026-09-08","v":102126.39},{"f":"2026-09-18","v":102889.65},{"f":"2026-09-30","v":103653.59},{"f":"2026-10-13","v":104486.1},{"f":"2026-10-22","v":105083.94}],"cat":[{"f":"2026-04-29","v":108546.68},{"f":"2026-05-12","v":109748.3},{"f":"2026-05-22","v":110656.5},{"f":"2026-06-04","v":111421.52},{"f":"2026-06-17","v":112243.43},{"f":"2026-06-29","v":112994.68},{"f":"2026-07-13","v":114003.83},{"f":"2026-07-23","v":114673.33},{"f":"2026-08-04","v":115291.34},{"f":"2026-08-14","v":116013.98},{"f":"2026-08-27","v":116640.12},{"f":"2026-09-08","v":117767.18},{"f":"2026-09-18","v":118874.08},{"f":"2026-09-30","v":119518.88},{"f":"2026-10-13","v":120540.07},{"f":"2026-10-22","v":121296.48}]},"returns":[{"p":"1m","fund":1.82,"med":1.99,"pct":93,"rank":50,"n":54},{"p":"3m","fund":5.6,"med":5.75,"pct":63,"rank":34,"n":54},{"p":"ytd","fund":21.97,"med":24.97,"pct":92,"rank":48,"n":52},{"p":"1y","fund":33.91,"med":35.17,"pct":67,"rank":35,"n":52}],"monthly":[{"m":"2026-06","fund":1.86,"med":1.74,"pct":30,"rank":16,"n":53,"mtd":false},{"m":"2026-07","fund":1.75,"med":1.69,"pct":39,"rank":21,"n":53,"mtd":false},{"m":"2026-08","fund":1.76,"med":1.73,"pct":46,"rank":25,"n":54,"mtd":false},{"m":"2026-09","fund":2.02,"med":2.13,"pct":68,"rank":37,"n":54,"mtd":false},{"m":"2026-10","fund":1.38,"med":1.53,"pct":85,"rank":45,"n":53,"mtd":true}]},"comp":{"hasPrev":true,"prevSnapshot":"2026-09","divergente":false,"rows":[{"tipo":"Corporativo USD","pct":44.11,"med":10.03,"prev":43.54,"delta":0.57},{"tipo":"Plazo Fijo","pct":13.31,"med":12.57,"prev":14.27,"delta":-0.96},{"tipo":"Caución","pct":5.09,"med":4.21,"prev":7.72,"delta":-2.63},{"tipo":"MM FCI","pct":4.95,"med":1.76,"prev":4.84,"delta":0.11},{"tipo":"Pagarés, Cheques y Facturas","pct":4.89,"med":8.02,"prev":6.47,"delta":-1.58},{"tipo":"Provincial ARS","pct":3.59,"med":2.28,"prev":2.55,"delta":1.04},{"tipo":"Tasa Fija ARS","pct":0,"med":29.28,"prev":0,"delta":0},{"tipo":"CER","pct":0,"med":24.8,"prev":0,"delta":0},{"tipo":"Hard Dollar Soberano","pct":0,"med":19.35,"prev":0,"delta":0},{"tipo":"Dual TAMAR/DL","pct":0,"med":15.23,"prev":0,"delta":0},{"tipo":"TAMAR / Flotante","pct":0,"med":11.77,"prev":0,"delta":0},{"tipo":"Dollar Linked","pct":0,"med":11.25,"prev":0,"delta":0},{"tipo":"Dual TAMAR/Fija","pct":0,"med":7.42,"prev":0,"delta":0},{"tipo":"Dual CER/TAMAR","pct":0,"med":4.88,"prev":0,"delta":0},{"tipo":"Hard Dollar Sub-soberano","pct":0,"med":1.67,"prev":0,"delta":0},{"tipo":"BOPREAL","pct":0,"med":1.27,"prev":0,"delta":0}]},"vol":{"d90":0.5394945511233423,"d365":1.2918215369412682,"ret90":24.74452242156484,"n90":63,"n365":241,"last":"2026-10-22"},"ytdInfl":{"desde":"2025-12-30","hasta":"2026-09-30","pct":20.587757861882693},"flows":{"desde":"2026-09-23","hasta":"2026-10-23","flujo":5372844888.589259}},{"name":"FBA Renta Fija Pesos I - Clase B","fetchedAt":"2026-10-23T14:19:59.902Z","ficha":{"gestora":"BBVA","subcategoria":"RENTA FIJA T+1","clase":"B","categoria":"RENTA FIJA","fecha":"2026-10-22","patrimonio":83034866814.37,"calificacion":"AAf.ar","fee_gestion":2.179,"fee_depositaria":0.121,"gastos_gestion":0,"plazo_rescate":1,"rend_30d":1.8765,"rend_30d_dias":30,"rend_90d":5.7566,"rend_ytd":23.2917,"rend_1y":31.0572},"patrimonio":{"total":178276707147.09998,"n":2,"clases":[{"fondo":"FBA Renta Fija Pesos I - Clase A","patrimonio":95241840332.73,"fecha":"2026-10-22","incluida":true},{"fondo":"FBA Renta Fija Pesos I - Clase B","patrimonio":83034866814.37,"fecha":"2026-10-22","incluida":true}]},"peers":{"lastDate":"2026-10-22","n":59,"series":{"fund":[{"f":"2026-04-20","v":71000.23},{"f":"2026-04-30","v":71301.76},{"f":"2026-05-13","v":71913.12},{"f":"2026-05-26","v":72478.81},{"f":"2026-06-05","v":72975.23},{"f":"2026-06-18","v":73411.52},{"f":"2026-06-30","v":73956.31},{"f":"2026-07-14","v":74545.37},{"f":"2026-07-24","v":75069.17},{"f":"2026-08-05","v":75361.76},{"f":"2026-08-18","v":75874.81},{"f":"2026-08-28","v":76564.42},{"f":"2026-09-09","v":77064.57},{"f":"2026-09-21","v":77727.17},{"f":"2026-10-01","v":78207.42},{"f":"2026-10-14","v":78758.02},{"f":"2026-10-22","v":79206.3}],"cat":[{"f":"2026-04-29","v":108546.68},{"f":"2026-05-12","v":109748.3},{"f":"2026-05-22","v":110656.5},{"f":"2026-06-04","v":111421.52},{"f":"2026-06-17","v":112243.43},{"f":"2026-06-29","v":112994.68},{"f":"2026-07-13","v":114003.83},{"f":"2026-07-23","v":114673.33},{"f":"2026-08-04","v":115291.34},{"f":"2026-08-14","v":116013.98},{"f":"2026-08-27","v":116640.12},{"f":"2026-09-08","v":117767.18},{"f":"2026-09-18","v":118874.08},{"f":"2026-09-30","v":119518.88},{"f":"2026-10-13","v":120540.07},{"f":"2026-10-22","v":121296.48}]},"returns":[{"p":"1m","fund":1.88,"med":1.99,"pct":91,"rank":49,"n":54},{"p":"3m","fund":5.51,"med":5.75,"pct":70,"rank":38,"n":54},{"p":"ytd","fund":22.91,"med":24.97,"pct":79,"rank":41,"n":52},{"p":"1y","fund":31.06,"med":35.17,"pct":90,"rank":47,"n":52}],"monthly":[{"m":"2026-06","fund":1.74,"med":1.74,"pct":51,"rank":27,"n":53,"mtd":false},{"m":"2026-07","fund":1.73,"med":1.69,"pct":43,"rank":23,"n":53,"mtd":false},{"m":"2026-08","fund":1.89,"med":1.73,"pct":18,"rank":10,"n":54,"mtd":false},{"m":"2026-09","fund":1.92,"med":2.13,"pct":85,"rank":46,"n":54,"mtd":false},{"m":"2026-10","fund":1.38,"med":1.53,"pct":83,"rank":44,"n":53,"mtd":true}]},"comp":{"hasPrev":true,"prevSnapshot":"2026-09","divergente":false,"rows":[{"tipo":"Tasa Fija ARS","pct":56.05,"med":29.28,"prev":63.55,"delta":-7.5},{"tipo":"Plazo Fijo","pct":16.74,"med":12.57,"prev":9.61,"delta":7.13},{"tipo":"CER","pct":11.12,"med":24.8,"prev":2.54,"delta":8.58},{"tipo":"Corporativo USD","pct":9.02,"med":10.03,"prev":9.14,"delta":-0.12},{"tipo":"Caución","pct":1.96,"med":4.21,"prev":5.03,"delta":-3.07},{"tipo":"Liquidez","pct":0.6,"med":0.09,"prev":1.32,"delta":-0.72},{"tipo":"MM FCI","pct":0.57,"med":1.76,"prev":4.56,"delta":-3.99},{"tipo":"Provincial ARS","pct":0.5,"med":2.28,"prev":0.5,"delta":0},{"tipo":"Hard Dollar Soberano","pct":0,"med":19.35,"prev":0,"delta":0},{"tipo":"Dual TAMAR/DL","pct":0,"med":15.23,"prev":0,"delta":0},{"tipo":"TAMAR / Flotante","pct":0,"med":11.77,"prev":0,"delta":0},{"tipo":"Dollar Linked","pct":0,"med":11.25,"prev":0,"delta":0},{"tipo":"Pagarés, Cheques y Facturas","pct":0,"med":8.02,"prev":0,"delta":0},{"tipo":"Dual TAMAR/Fija","pct":0,"med":7.42,"prev":0,"delta":0},{"tipo":"Dual CER/TAMAR","pct":0,"med":4.88,"prev":0,"delta":0},{"tipo":"Hard Dollar Sub-soberano","pct":0,"med":1.67,"prev":0,"delta":0},{"tipo":"BOPREAL","pct":0,"med":1.27,"prev":0,"delta":0}]},"vol":{"d90":1.2663655021955,"d365":1.604277976653791,"ret90":24.30447995276026,"n90":63,"n365":241,"last":"2026-10-22"},"ytdInfl":{"desde":"2025-12-30","hasta":"2026-09-30","pct":21.61157182667055},"flows":{"desde":"2026-09-23","hasta":"2026-10-23","flujo":-28631141942.947285}}]};</script><script id="app-js">
+(function(){
+'use strict';
+
+/* ================= Configuración ================= */
+var SERVER='Fonditos';
+var FONDOS=[
+  'Fima Premium - Clase B','FBA Money Market Pesos - Clase B','Delta Pesos - Clase B','Argenfunds Liquidez - Clase B',
+  'Fima Ahorro Pesos - Clase C','Gainvest FF - Clase B','Max Ahorro Pesos - Clase B','Schroder Renta Plus - Clase B',
+  'Pellegrini Renta Fija - Clase B','Fima Ahorro Plus - Clase C','Balanz Capital Ahorro - Clase D','Argenfunds Renta Mixta - Clase B',
+  'Pionero Renta Ahorro - Clase B','Supergestion Mix VI - Clase B','Delta Ahorro - Clase B','FBA Renta Fija Pesos I - Clase B'
+];
+var TOOLS=['ficha_fondo','buscar_fondos','rendimiento_vs_peers','tenencias_vs_peers','serie_fondo','tasas_mercado','flujo_por_fondo','ranking_fondos'];
+var FONT_LINK='https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap';
+var DEFAULT_CFG={
+  pctPeor:75,
+  flujoRojo:-10,
+  compRojo:20,
+  staleRojo:4,
+  tamChico:50e9,tamGrande:500e9,
+  revisarMin:3,
+  patMin:20,
+  pref:'',
+  soloT1:1,usaTam:1,usaAlarmas:1,usaSost:1,usaInfl:1
+};
+
+/* ================= Utilidades ================= */
+var MESES=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+var NF={};
+function fx(v,d){ if(d===undefined)d=2; if(v===null||v===undefined||!isFinite(v))return '—'; if(!NF[d])NF[d]=new Intl.NumberFormat('es-AR',{minimumFractionDigits:d,maximumFractionDigits:d}); return NF[d].format(v); }
+function sgn(v,d){ if(v===null||v===undefined||!isFinite(v))return '—'; return (v>0?'+':'')+fx(v,d===undefined?1:d); }
+function esc(s){ return String(s===null||s===undefined?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];}); }
+function D(s){ return Date.UTC(+s.slice(0,4),+s.slice(5,7)-1,+s.slice(8,10)); }
+function addDays(s,n){ return new Date(D(s)+n*864e5).toISOString().slice(0,10); }
+function daysBetween(a,b){ return Math.round((D(b)-D(a))/864e5); }
+function fDate(s){ return s?s.slice(8,10)+'/'+s.slice(5,7)+'/'+s.slice(0,4):'—'; }
+function fDM(s){ return s?s.slice(8,10)+'/'+s.slice(5,7):'—'; }
+function fShort(ms){ var d=new Date(ms); return d.getUTCDate()+' '+MESES[d.getUTCMonth()]; }
+function fMonth(m){ return MESES[+m.slice(5,7)-1]; }
+function num(v){ return (typeof v==='number'&&isFinite(v))?v:null; }
+function baseName(n){ return String(n).replace(/\s+-\s+Clase\s+.*$/i,''); }
+function fARS(v){
+  if(v===null||v===undefined||!isFinite(v))return '—';
+  if(v>=1e9)return '$ '+fx(v/1e9,0)+' mil M';
+  return '$ '+fx(v/1e6,0)+' M';
+}
+var fARSc=fARS;
+
+/* ================= Cálculos puros ================= */
+function sumClases(rows,base){
+  var mine=(rows||[]).filter(function(r){return baseName(r.fondo)===base;});
+  var maxF=mine.reduce(function(m,r){return r.fecha&&r.fecha>m?r.fecha:m;},'');
+  var lim=maxF?addDays(maxF,-7):'';
+  var total=0,n=0;
+  var clases=mine.map(function(r){
+    var inc=!!(r.fecha&&r.fecha>=lim&&num(r.patrimonio)!==null);
+    if(inc){total+=r.patrimonio;n++;}
+    return {fondo:r.fondo,patrimonio:r.patrimonio,fecha:r.fecha,incluida:inc};
+  });
+  return {total:n?total:null,n:n,clases:clases};
+}
+
+/* Rendimiento del fondo del último cierre del año anterior hasta el cierre del mes de la inflación (mismo período que el IPC acumulado) */
+function ytdTo(serie,mes){
+  var y=+mes.slice(0,4),mo=+mes.slice(5,7);
+  var fin=new Date(Date.UTC(y,mo,0)).toISOString().slice(0,10),ini=(y-1)+'-12-31';
+  function last(lim){var r=null;(serie||[]).forEach(function(p){if(p.f<=lim&&p.v!==null&&isFinite(p.v)&&(r===null||p.f>r.f))r=p;});return r;}
+  var a=last(ini),b=last(fin);
+  if(!a||!b||daysBetween(a.f,ini)>7||daysBetween(b.f,fin)>7||a.v<=0)return null;
+  return {desde:a.f,hasta:b.f,pct:(b.v/a.v-1)*100};
+}
+
+function volStats(serie){
+  var s=[],i;
+  for(i=0;i<(serie||[]).length;i++){
+    var p=serie[i];
+    if(p.v===null||p.v===undefined||!isFinite(p.v))continue;
+    if(s.length&&p.v===s[s.length-1].v)continue;
+    s.push(p);
+  }
+  if(s.length<30)return null;
+  var last=s[s.length-1].f;
+  function win(days){var cut=addDays(last,-days);return s.filter(function(p){return p.f>=cut;});}
+  function vol(w){
+    if(w.length<25)return null;
+    var r=[],j;
+    for(j=1;j<w.length;j++){var d=daysBetween(w[j-1].f,w[j].f); if(d>0)r.push((w[j].v/w[j-1].v-1)/d);}
+    if(r.length<20)return null;
+    var m=r.reduce(function(a,b){return a+b;},0)/r.length;
+    var sd=Math.sqrt(r.reduce(function(a,b){return a+(b-m)*(b-m);},0)/(r.length-1));
+    return sd*Math.sqrt(365)*100;
+  }
+  function ret(w){
+    if(w.length<2)return null;
+    var d=daysBetween(w[0].f,w[w.length-1].f);
+    if(d<30)return null;
+    return (Math.pow(w[w.length-1].v/w[0].v,365/d)-1)*100;
+  }
+  var w90=win(90),w365=win(365);
+  return {d90:vol(w90),d365:w365.length>=150?vol(w365):null,ret90:ret(w90),n90:w90.length,n365:w365.length,last:last};
+}
+
+function nivel(v,umbral,dir){ /* dir 'ge' => v>=umbral; 'le' => v<=umbral. 2 = alarma, 0 = en orden */
+  if(v===null||v===undefined)return null;
+  if(dir==='le')return v<=umbral?2:0;
+  return v>=umbral?2:0;
+}
+
+function analyze(b,cfg,tasas){
+  var c=Object.assign({},DEFAULT_CFG,cfg||{});
+  var f=b.ficha||{};
+  var m={name:b.name,error:null,fetchedAt:b.fetchedAt};
+  m.gestora=f.gestora;m.subcat=f.subcategoria;m.categoria=f.categoria;m.clase=f.clase;m.plazo=num(f.plazo_rescate);
+  m.calif=f.calificacion;m.fechaDato=f.fecha;
+  m.fees=(num(f.fee_gestion)||0)+(num(f.fee_depositaria)||0)+(num(f.gastos_gestion)||0);
+  m.isMM=(f.categoria==='MERCADO DE DINERO');
+  m.rend={d30:num(f.rend_30d),d90:num(f.rend_90d),ytd:num(f.rend_ytd),y1:num(f.rend_1y),
+    tna:(num(f.rend_30d)!==null&&num(f.rend_30d_dias))?f.rend_30d/f.rend_30d_dias*365:null};
+  m.patrimonio=b.patrimonio||{total:null,n:0,clases:[]};
+  var tot=m.patrimonio.total;
+  m.tamano=tot===null?null:(tot<c.tamChico?'Chico':(tot>=c.tamGrande?'Grande':'Mediano'));
+  m.vol=b.vol||null;
+  m.ytdInfl=b.ytdInfl||null;
+  m.volRatio=(m.vol&&m.vol.d90!==null&&m.vol.d365)?m.vol.d90/m.vol.d365:null;
+  m.expo={};((b.comp&&b.comp.rows)||[]).forEach(function(r){m.expo[r.tipo]=r.pct;});
+
+  var k={},i;
+  /* Rendimiento frente a fondos similares: peor cuartil en 2 de los últimos 3 meses */
+  var mo=((b.peers&&b.peers.monthly)||[]).filter(function(x){return !x.mtd;}).slice(-3);
+  var malos=mo.filter(function(x){return x.pct>=c.pctPeor;}).length;
+  m.sost={malos:malos,n:mo.length};
+  k.peers=mo.length?{sev:malos>=2?2:0,txt:'Bajo rendimiento: peor cuartil en '+malos+' de los últimos '+mo.length+' meses',val:malos+' de '+mo.length}:{sev:null,txt:'Sin datos de rendimiento frente a fondos similares',val:'—'};
+  /* Flujos: fondo total (todas las clases) sobre su patrimonio total */
+  var fl=b.flows||null;
+  var worst=(fl&&tot&&num(fl.flujo)!==null)?fl.flujo/tot*100:null;
+  k.flujos={sev:worst===null?null:nivel(worst,c.flujoRojo,'le'),
+    txt:worst===null?'Sin datos de flujos':'Flujo neto de los últimos 30 días '+sgn(worst,1)+' % del patrimonio del fondo',
+    val:worst===null?'—':sgn(worst,1)+' %',pct:worst,desde:fl?fl.desde:null,hasta:fl?fl.hasta:null};
+  /* Composición */
+  var cp=b.comp;
+  if(cp&&cp.rows&&cp.rows.length&&cp.hasPrev){
+    var top=cp.rows.reduce(function(a,r){return (a===null||Math.abs(r.delta)>Math.abs(a.delta))?r:a;},null);
+    k.comp={sev:nivel(Math.abs(top.delta),c.compRojo,'ge'),txt:top.tipo+' '+sgn(top.delta,1)+' pp vs mes anterior',val:sgn(top.delta,1)+' pp',top:top};
+  } else k.comp={sev:null,txt:'Sin composición del mes anterior',val:'—'};
+  /* Datos */
+  var ref=(b.fetchedAt||'').slice(0,10);
+  var age=(ref&&f.fecha)?daysBetween(f.fecha,ref):null;
+  k.datos={age:age,sev:age===null?null:nivel(age,c.staleRojo,'ge'),txt:age===null?'Sin fecha de dato':'Dato del '+fDate(f.fecha)+' ('+age+' días)',val:age===null?'—':age+' d'};
+  m.checks=k;
+
+  /* Señal de revisión de salida: 3 condiciones */
+  var cond=[
+    {id:'c1',ok:malos>=2,label:'Bajo rendimiento sostenido frente a fondos similares (2 de los últimos 3 meses)',val:mo.length?malos+' de '+mo.length:'—'},
+    {id:'c2',ok:(worst!==null&&worst<=c.flujoRojo),label:'Retiros netos de al menos el '+fx(Math.abs(c.flujoRojo),0)+' % del patrimonio en 30 días',val:worst===null?'—':sgn(worst,1)+' %'},
+    {id:'c3',ok:k.comp.sev===2,label:'Cambio grande en la composición de su cartera (≥ '+c.compRojo+' pp en algún tipo de activo)',val:k.comp.val||'—'}
+  ];
+  var aplic=cond.filter(function(x){return !x.na;});
+  var n=aplic.filter(function(x){return x.ok;}).length;
+  m.exit={n:n,total:aplic.length,cond:cond,nivel:n>=c.revisarMin?'revisar':'ok'};
+
+  /* Alarmas: solo las que sonaron */
+  m.alarmas=CHK.filter(function(x){var kk=k[x[0]];return kk&&kk.sev===2;}).map(function(x){return {id:x[0],label:x[1],txt:k[x[0]].txt,val:k[x[0]].val};});
+  m.sinDato=CHK.filter(function(x){var kk=k[x[0]];return kk&&kk.sev===null&&!kk.na;}).map(function(x){return x[1];});
+  m.rank=(m.exit.nivel==='revisar'?100:0)+m.alarmas.length;
+  m.sev=m.alarmas.length?2:0;
+
+  return m;
+}
+
+/* Alternativa: solo entre los fondos de la propia cartera con el mismo plazo de rescate */
+function assignAlt(models){
+  models.forEach(function(m){
+    var otros=models.filter(function(x){return x!==m&&x.plazo===m.plazo&&x.exit.nivel!=='revisar';});
+    if(!otros.length){m.alt={tipo:'sin_pares'};return;}
+    var best=null;
+    otros.forEach(function(x){ if(x.rend.d90!==null&&(best===null||x.rend.d90>best.rend.d90))best=x; });
+    var mine=m.rend.d90;
+    if(best&&mine!==null&&best.rend.d90>mine)m.alt={tipo:'mejor',a:{fondo:best.name,rend90:best.rend.d90,plazo:best.plazo},delta:best.rend.d90-mine};
+    else m.alt={tipo:'lider'};
+  });
+}
+
+var OTROS_MAX=60;
+/* ===== Otros fondos: candidatos T+1 de afuera de la cartera ===== */
+function candidatosDe(rk,ownBases){
+  /* rk: {d30:[rows],d90:[rows],ytd:[rows]} de ranking_fondos. Una fila por clase; se queda con la clase que más rindió a 90 días de cada fondo. */
+  var byClass={};
+  ['d30','d90','ytd'].forEach(function(k){
+    (rk[k]||[]).forEach(function(r){
+      if(!r||!r.fondo||/Ley\s*N/i.test(r.fondo))return;
+      var o=byClass[r.fondo]||(byClass[r.fondo]={fondo:r.fondo,clase:r.clase||null,d30:null,d90:null,ytd:null});
+      if(num(r.return_pct)!==null)o[k]=r.return_pct;
+    });
+  });
+  var own={};(ownBases||[]).forEach(function(b){own[b]=1;});
+  var best={};
+  Object.keys(byClass).forEach(function(n){
+    var c=byClass[n],base=baseName(n);
+    if(own[base]||c.d90===null||c.d90<=0)return;
+    if(!best[base]||c.d90>best[base].d90)best[base]=c;
+  });
+  return Object.keys(best).map(function(b){var c=best[b];c.base=b;return c;}).sort(function(a,b){return b.d90-a.d90;});
+}
+
+async function loadOtros(){
+  if(!MCP||S.otrosLoading)return;
+  S.otrosLoading=true;S.otrosErr='';S.otros=null;renderAll();
+  try{
+    var own=S.bundles.filter(function(b){return !b.error;});
+    var ownBases=FONDOS.map(baseName);
+    var res=await Promise.all(['30d','90d','ytd'].map(function(p){return safe(function(){return callF('ranking_fondos',{subcategoria:'T+1',periodo:p,limite:300});});}));
+    if(!res[1].ok||!res[1].v||!res[1].v.rows)throw new Error('ranking');
+    var rk={d30:(res[0].ok&&res[0].v&&res[0].v.rows)||[],d90:res[1].v.rows,ytd:(res[2].ok&&res[2].v&&res[2].v.rows)||[]};
+    var cands=candidatosDe(rk,ownBases);
+    var gest={};own.forEach(function(b){if(b.ficha&&b.ficha.gestora)gest[String(b.ficha.gestora).toLowerCase()]=1;});
+    var min=(S.cfg.usaTam?S.cfg.patMin:0)*1e9,done=[],i=0,CH=6;
+    function enough(){
+      var con=0,sin=0;
+      done.forEach(function(c){ if(c.pat!==null&&c.pat>=min){ if(c.gestora&&gest[String(c.gestora).toLowerCase()])con++; else sin++; } });
+      return con>=5&&sin>=5;
+    }
+    async function evalOne(c){
+      var r=await Promise.all([safe(function(){return callF('buscar_fondos',{q:c.base,limite:50});}),safe(function(){return callF('ficha_fondo',{fondo:c.fondo});})]);
+      var pat=(r[0].ok&&r[0].v&&r[0].v.data)?sumClases(r[0].v.data,c.base).total:null;
+      var f=r[1].ok&&r[1].v?r[1].v:null;
+      return {base:c.base,fondo:c.fondo,clase:c.clase||(f&&f.clase)||null,d30:c.d30,d90:c.d90,ytd:c.ytd,pat:pat,gestora:f?f.gestora:null,
+        fees:f&&f.datos_actuales?((num(f.datos_actuales.fee_gestion)||0)+(num(f.datos_actuales.fee_depositaria)||0)+(num(f.datos_actuales.gastos_gestion)||0)):null,
+        plazo:f&&f.datos_actuales?num(f.datos_actuales.plazo_rescate):null};
+    }
+    while(i<cands.length&&i<OTROS_MAX&&!enough()){
+      var chunk=cands.slice(i,i+CH);i+=CH;
+      var out=await Promise.all(chunk.map(evalOne));
+      out.forEach(function(x){done.push(x);});
+    }
+    S.otros={gen:new Date().toISOString(),evaluados:done.length,total:cands.length,cands:done};
+  }catch(e){
+    S.otrosErr='No se pudo consultar el ranking de fondos. Probá actualizar en un momento.';
+  }
+  S.otrosLoading=false;renderAll();
+}
+
+function otrosSecciones(models,cfg){
+  var c=Object.assign({},DEFAULT_CFG,cfg||{});
+  var ownT1=models.filter(function(m){return m.plazo===1&&m.rend.d90!==null;}).sort(function(a,b){return b.rend.d90-a.rend.d90;});
+  var best=ownT1[0]||null;
+  var gest={};models.forEach(function(m){if(m.gestora)gest[String(m.gestora).toLowerCase()]=1;});
+  var min=(c.usaTam?c.patMin:0)*1e9;
+  var ok=((S.otros&&S.otros.cands)||[]).filter(function(x){return x.pat!==null&&x.pat>=min&&x.gestora&&(x.plazo===null||x.plazo===1);});
+  var con=ok.filter(function(x){return gest[String(x.gestora).toLowerCase()];}).sort(function(a,b){return b.d90-a.d90;}).slice(0,5);
+  var sin=ok.filter(function(x){return !gest[String(x.gestora).toLowerCase()];}).sort(function(a,b){return b.d90-a.d90;}).slice(0,5);
+  return {best:best,con:con,sin:sin,ownT1:ownT1};
+}
+
+function ganoInfl(m){ return !!(m.ytdInfl&&m.ytdInfl.pct!==null&&m.ytdInfl.pct>INFLACION.ytd); }
+function pickSugerencia(models,cfg){
+  var c=Object.assign({},DEFAULT_CFG,cfg||{});
+  var pool=c.soloT1?models.filter(function(m){return m.plazo===1;}):models.slice();
+  var vs=pool.map(function(m){return m.rend.d90;}).filter(function(v){return v!==null;}).sort(function(a,b){return a-b;});
+  var med=vs.length?(vs.length%2?vs[(vs.length-1)/2]:(vs[vs.length/2-1]+vs[vs.length/2])/2):null;
+  var ok=pool.filter(function(m){
+    return m.rend.d90!==null
+      &&(!c.usaTam||(m.patrimonio.total!==null&&m.patrimonio.total>=c.patMin*1e9))
+      &&(!c.usaAlarmas||m.alarmas.length===0)
+      &&(!c.usaSost||(m.sost&&m.sost.n>0&&m.sost.malos===0))
+      &&(!c.usaInfl||ganoInfl(m))
+      &&(!c.pref||(m.expo[c.pref]||0)>0);
+  });
+  ok.sort(function(a,b){
+    if(c.pref){var ea=a.expo[c.pref]||0,eb=b.expo[c.pref]||0;if(eb!==ea)return eb-ea;}
+    return b.rend.d90-a.rend.d90;
+  });
+  return {m:ok[0]||null,med:med,pref:c.pref||'',nPool:pool.length,cfg:c};
+}
+
+function renderSugerencia(models){
+  var r=pickSugerencia(models,S.cfg),m=r.m,c=r.cfg,txt;
+  if(!r.nPool)return '';
+  if(!m){
+    txt='Hoy ningún fondo'+(c.soloT1?' T+1':'')+' cumple los criterios'+(r.pref?' con inversión en <b>'+esc(r.pref)+'</b>':'')+'.';
+  } else {
+    var det=['tiene un patrimonio de '+fARSc(m.patrimonio.total)];
+    if(c.usaAlarmas)det.push('sin alarmas');
+    if(c.usaSost)det.push('sin caer en el peor cuartil de su categoría en los últimos '+m.sost.n+' meses');
+    if(c.usaInfl)det.push('le ganó a la inflación '+INFLACION.mes.slice(0,4)+' ('+sgn(m.ytdInfl.pct-INFLACION.ytd,1)+' pp)');
+    txt='<b>'+esc(m.name)+'</b>'
+      +(r.pref?', el de mayor inversión en <b>'+esc(r.pref)+'</b> ('+fx(m.expo[r.pref],0)+' % de su cartera)':'')
+      +'. Rinde '+fx(m.rend.d90,2)+' % a 90 días'+(r.med!==null?' (mediana '+(c.soloT1?'de los T+1 de la cartera':'de la cartera')+': '+fx(r.med,2)+' %)':'')
+      +', '+det.join(', ')+'.';
+  }
+  return '<section class="sugg" aria-label="Sugerencia"><span class="stag">Sugerencia</span><div><p>'+txt+'</p></div></section>';
+}
+
+/* ================= Gráficos SVG ================= */
+function lineSvg(series,o){
+  o=o||{};
+  var W=560,H=o.h||210,m={l:46,r:92,t:12,b:26};
+  var all=[];series.forEach(function(s){all=all.concat(s.pts);});
+  if(all.length<2)return '<p class="muted">Sin datos suficientes.</p>';
+  var x0=Infinity,x1=-Infinity,y0=Infinity,y1=-Infinity;
+  all.forEach(function(p){if(p.x<x0)x0=p.x;if(p.x>x1)x1=p.x;if(p.y<y0)y0=p.y;if(p.y>y1)y1=p.y;});
+  var pad=(y1-y0)*0.14||Math.abs(y1)*0.02||1;y0-=pad;y1+=pad;
+  function sx(x){return m.l+(x-x0)/((x1-x0)||1)*(W-m.l-m.r);}
+  function sy(y){return H-m.b-(y-y0)/((y1-y0)||1)*(H-m.t-m.b);}
+  var g='',i;
+  for(i=0;i<4;i++){
+    var v=y0+(y1-y0)*i/3,yy=sy(v).toFixed(1);
+    g+='<line class="grid" x1="'+m.l+'" x2="'+(W-m.r)+'" y1="'+yy+'" y2="'+yy+'"/><text x="'+(m.l-6)+'" y="'+(+yy+4)+'" text-anchor="end">'+fx(v,o.d===undefined?1:o.d)+'</text>';
+  }
+  g+='<text x="'+m.l+'" y="'+(H-6)+'">'+fShort(x0)+'</text><text x="'+(W-m.r)+'" y="'+(H-6)+'" text-anchor="end">'+fShort(x1)+'</text>';
+  var labs=[];
+  series.forEach(function(s){
+    var d='M'+s.pts.map(function(p){return sx(p.x).toFixed(1)+' '+sy(p.y).toFixed(1);}).join('L');
+    g+='<path d="'+d+'" fill="none" stroke="'+s.color+'" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"'+(s.dash?' stroke-dasharray="'+s.dash+'"':'')+'/>';
+    var lp=s.pts[s.pts.length-1];
+    g+='<circle cx="'+sx(lp.x).toFixed(1)+'" cy="'+sy(lp.y).toFixed(1)+'" r="3.5" fill="'+s.color+'" stroke="var(--surface)" stroke-width="2"><title>'+esc(s.name)+': '+fx(lp.y,o.d===undefined?1:o.d)+' ('+fShort(lp.x)+')</title></circle>';
+    labs.push({y:sy(lp.y),t:s.name+' '+fx(lp.y,o.d===undefined?1:o.d)});
+  });
+  labs.sort(function(a,b){return a.y-b.y;});
+  for(i=1;i<labs.length;i++){ if(labs[i].y-labs[i-1].y<13)labs[i].y=labs[i-1].y+13; }
+  labs.forEach(function(l){g+='<text class="v" x="'+(W-m.r+8)+'" y="'+(l.y+4).toFixed(1)+'">'+esc(l.t)+'</text>';});
+  return '<svg class="ch" viewBox="0 0 '+W+' '+H+'" role="img" aria-label="'+esc(o.aria||'Gráfico de líneas')+'">'+g+'</svg>';
+}
+
+function barSvg(items,o){
+  o=o||{};
+  var W=560,H=190,m={l:46,r:12,t:14,b:26};
+  if(!items.length)return '<p class="muted">Sin datos suficientes.</p>';
+  var ys=items.map(function(i){return i.v;}).concat([0]);
+  (o.lines||[]).forEach(function(l){ys.push(l.v);});
+  var y0=Math.min.apply(null,ys),y1=Math.max.apply(null,ys);
+  var pad=(y1-y0)*0.1||1;y0-=pad;y1+=pad;
+  function sy(y){return H-m.b-(y-y0)/((y1-y0)||1)*(H-m.t-m.b);}
+  var bw=(W-m.l-m.r)/items.length,g='',i;
+  for(i=0;i<4;i++){var v=y0+(y1-y0)*i/3,yy=sy(v).toFixed(1);g+='<line class="grid" x1="'+m.l+'" x2="'+(W-m.r)+'" y1="'+yy+'" y2="'+yy+'"/><text x="'+(m.l-6)+'" y="'+(+yy+4)+'" text-anchor="end">'+fx(v,0)+'</text>';}
+  g+='<line class="axis" x1="'+m.l+'" x2="'+(W-m.r)+'" y1="'+sy(0).toFixed(1)+'" y2="'+sy(0).toFixed(1)+'"/>';
+  (o.lines||[]).forEach(function(l){
+    var yy=sy(l.v).toFixed(1);
+    g+='<line x1="'+m.l+'" x2="'+(W-m.r)+'" y1="'+yy+'" y2="'+yy+'" stroke="'+l.color+'" stroke-width="1" stroke-dasharray="4 3"/>'+(l.label?'<text x="'+(W-m.r)+'" y="'+(+yy-4)+'" text-anchor="end" style="fill:'+l.color+'">'+esc(l.label)+'</text>':'');
+  });
+  items.forEach(function(it,idx){
+    var x=m.l+idx*bw+bw*0.19,w=bw*0.62,yz=sy(0),yv=sy(it.v);
+    g+='<rect x="'+x.toFixed(1)+'" y="'+Math.min(yz,yv).toFixed(1)+'" width="'+w.toFixed(1)+'" height="'+Math.max(1,Math.abs(yv-yz)).toFixed(1)+'" rx="2" fill="'+it.color+'"><title>'+esc(it.label+': '+fx(it.v,1)+' %')+'</title></rect>';
+    g+='<text x="'+(x+w/2).toFixed(1)+'" y="'+(H-8)+'" text-anchor="middle">'+esc(it.label)+'</text>';
+  });
+  var L=items[items.length-1];
+  g+='<text class="v" x="'+(m.l+(items.length-0.5)*bw).toFixed(1)+'" y="'+(L.v>=0?sy(L.v)-5:sy(L.v)+13).toFixed(1)+'" text-anchor="middle">'+fx(L.v,1)+' %</text>';
+  return '<svg class="ch" viewBox="0 0 '+W+' '+H+'" role="img" aria-label="'+esc(o.aria||'Gráfico de barras')+'">'+g+'</svg>';
+}
+
+/* ================= Vistas ================= */
+var S={otros:null,otrosLoading:false,otrosErr:'',cmp2:'d90',tab:'resumen',mode:'live',cfg:Object.assign({},DEFAULT_CFG),bundles:[],tasas:null,loading:null,fatal:null,open:{},sort:{key:'d90',dir:-1},msg:'',generatedAt:null,canDownload:false,errs:{}};
+var MCP=null,DL=null;
+var SNAP=(typeof window!=='undefined'&&window.__SNAPSHOT__)||null;
+
+function shape(s){ return s===null||s===undefined?'<i class="sg sn" aria-hidden="true"></i>':'<i class="sg s'+s+'" aria-hidden="true"></i>'; }
+function exitPill(x){
+  if(x==='revisar')return '<span class="pill s2">'+shape(2)+'Revisar salida</span>';
+  return '<span class="pill s0">'+shape(0)+'OK</span>';
+}
+var CHK=[['peers','Rendimiento'],['flujos','Flujos'],['comp','Composición']];
+function chips(m){
+  var o=m.alarmas.map(function(a){
+    return '<span class="chip al" title="'+esc(a.label+': '+a.txt)+'">'+shape(2)+esc(a.label)+(a.val&&a.val!=='—'?' <b class="mono">'+esc(a.val)+'</b>':'')+'</span>';
+  }).join('');
+  o+=(m.sinDato||[]).map(function(l){return '<span class="chip" title="No se pudo obtener el dato de '+esc(l)+'">'+shape(null)+'Sin dato: '+esc(l)+'</span>';}).join('');
+  return o?'<span class="chips">'+o+'</span>':'<span class="muted">Sin alarmas</span>';
+}
+
+function plazoLabel(p){ return p===0?'Liquidez inmediata (T+0)':(p===null?'Plazo de rescate sin dato':'Rescate T+'+p); }
+
+/* Inflación INDEC: dato cargado a mano (Fonditos no trae el IPC). Actualizar cuando salga el del mes siguiente. */
+var INFLACION={mes:'2026-09',mensual:1.9,ult3:[2.1,1.7,1.9],ytd:23.6};
+function inflPeriodo(k){
+  if(k==='d30')return INFLACION.mensual;
+  if(k==='ytd')return INFLACION.ytd;
+  if(k==='d90')return (INFLACION.ult3.reduce(function(a,x){return a*(1+x/100);},1)-1)*100;
+  return null;
+}
+function renderTasas(t){
+  function it(l,v,f){return '<span>'+l+' <b class="mono">'+v+'</b>'+(f?' <span class="muted">('+fDM(f)+')</span>':'')+'</span>';}
+  var o='';
+  if(!t)t={};
+  if(t.caucion&&num(t.caucion.tna)!==null)o+=it('Caución',fx(t.caucion.tna*100,1)+' % TNA',t.caucion.fecha);
+  if(t.tamar&&num(t.tamar.tna)!==null)o+=it('TAMAR',fx(t.tamar.tna*100,1)+' % TNA',t.tamar.fecha);
+  if(t.ccl)o+=it('Dólar CCL','$ '+fx(t.ccl.valor,2),t.ccl.fecha);
+  if(t.oficial)o+=it('Oficial','$ '+fx(t.oficial.valor,2),t.oficial.fecha);
+  o+='<span>Inflación <b class="mono">'+fx(INFLACION.mensual,1)+' %</b> mensual · <b class="mono">'+fx(INFLACION.ytd,1)+' %</b> en el año <span class="muted">('+MESES[+INFLACION.mes.slice(5,7)-1]+'-'+INFLACION.mes.slice(2,4)+')</span></span>';
+  return o;
+}
+
+function renderGanadores(models){
+  var inf=INFLACION.ytd;
+  var con=models.filter(function(m){return m.ytdInfl&&m.ytdInfl.pct!==null;});
+  if(!con.length)return '';
+  var gan=con.filter(function(m){return m.ytdInfl.pct>inf;}).sort(function(a,b){return b.ytdInfl.pct-a.ytdInfl.pct;});
+  var top=gan.slice(0,5),mx=top.length?top[0].ytdInfl.pct-inf:1;
+  var mes=MESES[+INFLACION.mes.slice(5,7)-1];
+  var rows=top.map(function(m){
+    var ex=m.ytdInfl.pct-inf;
+    return '<div class="hb"><span class="hn" title="'+esc(m.name)+'">'+esc(baseName(m.name))+'</span><span class="ht"><i style="width:'+Math.max(4,ex/mx*100).toFixed(1)+'%"></i></span><span class="hv mono">'+sgn(ex,1)+' pp</span></div>';
+  }).join('');
+  return '<div class="win"><h3>Le ganaron a la inflación '+INFLACION.mes.slice(0,4)+' <span class="muted">('+gan.length+' de '+con.length+')</span></h3>'
+    +(top.length?rows:'<p class="muted">Ningún fondo le ganó a la inflación en el período.</p>')
+    +'</div>';
+}
+
+function renderSummary(models){
+  var ok=0,al=0,rev=0;
+  models.forEach(function(m){ if(m.exit.nivel==='revisar')rev++; else if(m.alarmas.length)al++; else ok++; });
+  var list=models.filter(function(m){return m.alarmas.length;}).sort(function(a,b){return b.rank-a.rank;}).slice(0,6);
+  var ctx=renderTasas(S.tasas);
+  var items=list.length?list.map(function(m){
+    var why=m.alarmas.map(function(a){return a.txt;});
+    return '<li>'+shape(2)+'<div class="t"><strong>'+esc(m.name)+'</strong> '+(m.exit.nivel==='revisar'?exitPill('revisar'):'')+'<div class="muted">'+esc(why.join(' · '))+'</div></div></li>';
+  }).join(''):'<li>'+shape(0)+'<div class="t">Sin alarmas. Todos los fondos están dentro de los criterios.</div></li>';
+  return '<section class="summary" aria-label="Resumen">'
+    +'<div class="panel"><h2>Cartera y mercado</h2><div class="tiles">'
+    +'<div class="tile">'+shape(0)+'<b>'+ok+'</b><span class="l">Sin alarmas</span></div>'
+    +'<div class="tile">'+shape(2)+'<b>'+al+'</b><span class="l">Con alarmas</span></div>'
+    +'<div class="tile">'+shape(2)+'<b>'+rev+'</b><span class="l">Revisar salida</span></div>'
+    +'</div><div class="ctx">'+ctx+'</div>'+renderGanadores(models)+'</div>'
+    +'<div class="panel"><h2>Para mirar hoy</h2><ul class="alerts">'+items+'</ul></div></section>';
+}
+
+var COLS=[['d30','30 d'],['d90','90 d'],['ytd','Año'],['y1','1 año']];
+function sortVal(m,k){
+  if(k==='name')return m.name;
+  if(k==='pat')return m.patrimonio.total===null?-1:m.patrimonio.total;
+  if(k==='vol')return m.vol&&m.vol.d90!==null?m.vol.d90:-1;
+  if(k==='sev')return m.rank;
+  var v=m.rend[k];return v===null?-1e9:v;
+}
+function renderGroup(title,models){
+  var key=S.sort.key,dir=S.sort.dir;
+  models=models.slice().sort(function(a,b){var x=sortVal(a,key),y=sortVal(b,key);return (x<y?-1:(x>y?1:0))*dir;});
+  var best={};
+  if(models.length>1)COLS.forEach(function(c){var bm=null;models.forEach(function(m){if(m.rend[c[0]]!==null&&(bm===null||m.rend[c[0]]>bm.rend[c[0]]))bm=m;});if(bm)best[c[0]]=bm.name;});
+  function th(k,l,first){
+    var a=(key===k)?(dir===-1?'descending':'ascending'):'none';
+    return '<th scope="col" aria-sort="'+a+'"><button data-act="sort" data-k="'+k+'">'+l+(key===k?'<span class="sa">'+(dir===-1?'↓':'↑')+'</span>':'<span class="sa off" aria-hidden="true">↕</span>')+'</button></th>';
+  }
+  var head='<tr>'+th('name','Fondo')+th('sev','Señal')+th('pat','Patrimonio')+COLS.map(function(c){return th(c[0],c[1]);}).join('')+th('vol','Volatilidad')+'<th scope="col">Alarmas</th></tr>';
+  var rows=models.map(function(m){
+    var open=!!S.open[m.name];
+    var id='d-'+m.name.replace(/[^a-z0-9]/gi,'');
+    var tds=COLS.map(function(c){var v=m.rend[c[0]];return '<td class="mono'+(best[c[0]]===m.name?' best':'')+'">'+(v===null?'—':fx(v,2)+' %')+'</td>';}).join('');
+    var r='<tr><td><button class="rowbtn" data-act="open" data-n="'+esc(m.name)+'" aria-expanded="'+open+'"'+(open?' aria-controls="'+id+'"':'')+'><span class="nm"><i class="chev" aria-hidden="true"></i>'+esc(m.name)+'</span><span class="sub">'+esc(m.gestora||'')+' · '+esc(m.subcat||'')+'</span></button></td>'
+      +'<td>'+exitPill(m.exit.nivel)+'</td>'
+      +'<td class="mono" title="Suma de clases vigentes ('+m.patrimonio.n+')"><div class="patc"><span>'+fARSc(m.patrimonio.total)+'</span>'+(m.tamano?'<span class="pill neutral" style="font-family:var(--sans)">'+m.tamano+'</span>':'')+'</div></td>'
+      +tds
+      +'<td class="mono">'+(m.vol&&m.vol.d90!==null?fx(m.vol.d90,2)+' %':'—')+'</td>'
+      +'<td class="chipcell">'+chips(m)+'</td></tr>';
+    if(open)r+='<tr class="detail" id="'+id+'"><td colspan="9"><div class="dwrap">'+renderDetail(m)+'</div></td></tr>';
+    return r;
+  }).join('');
+  return '<section class="group"><header><h2>'+esc(title)+'</h2><span class="muted">'+models.length+(models.length===1?' fondo':' fondos')+' · se comparan entre sí por tener el mismo plazo de rescate</span></header><div class="tablewrap"><table><thead>'+head+'</thead><tbody>'+rows+'</tbody></table></div></section>';
+}
+
+var CMP=[['d30','30 días'],['d90','90 días'],['ytd','YTD']];
+function renderCompare(models){
+  var k=S.cmp||'d90';
+  var vals=models.map(function(m){return m.rend[k];}).filter(function(v){return v!==null;});
+  var infV=inflPeriodo(k);
+  var mx=Math.max.apply(null,vals.concat([infV===null?0:infV,0.0001]));
+  var groups={};
+  models.forEach(function(m){var g=m.plazo===null?99:m.plazo;(groups[g]=groups[g]||[]).push(m);});
+  var seg='<div class="seg" role="group" aria-label="Período">'+CMP.map(function(c){return '<button class="segb" data-act="cmp" data-p="'+c[0]+'" aria-pressed="'+(k===c[0])+'">'+c[1]+'</button>';}).join('')+'</div>';
+  var body=Object.keys(groups).sort(function(a,b){return a-b;}).map(function(g){
+    var arr=groups[g].slice().sort(function(a,b){var x=a.rend[k],y=b.rend[k];return (y===null?-1e9:y)-(x===null?-1e9:x);});
+    var vs=arr.map(function(m){return m.rend[k];}).filter(function(v){return v!==null;}).sort(function(a,b){return a-b;});
+    var med=vs.length?(vs.length%2?vs[(vs.length-1)/2]:(vs[vs.length/2-1]+vs[vs.length/2])/2):null;
+    var items=arr.map(function(m){return {m:m,v:m.rend[k]};});
+    if(infV!==null){items.push({infl:true,v:infV});items.sort(function(a,b){return (b.v===null?-1e9:b.v)-(a.v===null?-1e9:a.v);});}
+    var rows=items.map(function(it){
+      var v=it.v,w=v===null?0:Math.max(0,v)/mx*100;
+      if(it.infl)return '<div class="hb infl"><span class="hn">Inflación ('+MESES[+INFLACION.mes.slice(5,7)-1]+'-'+INFLACION.mes.slice(2,4)+')</span><span class="ht"><i style="width:'+w.toFixed(1)+'%;background:var(--warn)"></i></span><span class="hv mono">'+fx(v,2)+' %</span></div>';
+      var m=it.m,rev=m.exit.nivel==='revisar';
+      return '<div class="hb"><span class="hn">'+esc(m.name)+'</span><span class="ht"><i style="width:'+w.toFixed(1)+'%;'+(rev?'background:var(--crit)':'')+'"></i></span><span class="hv mono">'+(v===null?'—':fx(v,2)+' %')+'</span></div>';
+    }).join('');
+    return '<div class="hgrp"><h3>'+esc(plazoLabel(+g===99?null:+g))+(med!==null?' <span class="muted">· mediana de la cartera '+fx(med,2)+' %</span>':'')+'</h3>'+rows+'</div>';
+  }).join('');
+  return '<section class="panel cmp" aria-label="Comparativo de rendimiento"><div class="cmph"><h2>Rendimiento de todos los fondos</h2>'+seg+'</div>'+body+'<p class="note">Rendimiento del período, ordenado dentro de cada grupo de plazo de rescate. En naranja, la inflación del mismo período (hasta el mes del último dato); en rojo, los fondos en "Revisar salida".</p></section>';
+}
+
+function renderDetail(m){
+  var b=S.bundles.filter(function(x){return x.name===m.name;})[0]||{};
+  var c=S.cfg;
+  var conds=m.exit.cond.map(function(x){
+    return '<li>'+(x.na?shape(null):(x.ok?shape(2):shape(0)))+'<span>'+esc(x.label)+'</span><span class="v">'+esc(x.na?'No aplica':x.val)+'</span></li>';
+  }).join('');
+  var vtxt='Cumple '+m.exit.n+' de '+m.exit.total+' condiciones. Con '+c.revisarMin+' o más conviene revisar la salida.';
+  var alt='';
+  if(m.exit.nivel==='revisar'&&m.alt){
+    if(m.alt.tipo==='mejor'){
+      var a=m.alt.a;
+      alt='<p class="note" style="margin-top:10px"><b>Alternativa dentro de la cartera:</b> '+esc(a.fondo)+' rindió '+fx(a.rend90,2)+' % a 90 días contra '+fx(m.rend.d90,2)+' % de este fondo ('+sgn(m.alt.delta,2)+' pp), con el mismo plazo de rescate (T+'+a.plazo+'). Pasarse tiene costo de comisiones y de tiempo: comparar antes de decidir.</p>';
+    } else if(m.alt.tipo==='lider') alt='<p class="note" style="margin-top:10px"><b>Alternativa dentro de la cartera:</b> ningún otro fondo de la cartera con el mismo plazo de rescate rindió más a 90 días.</p>';
+    else alt='<p class="note" style="margin-top:10px"><b>Alternativa dentro de la cartera:</b> no hay otros fondos con el mismo plazo de rescate para comparar.</p>';
+  }
+  var box1='<div class="box"><h3>Señal de revisión de salida</h3><div class="verdict">'+exitPill(m.exit.nivel)+'</div><p class="muted" style="font-size:12px">'+esc(vtxt)+'</p><ul class="conds">'+conds+'</ul><p class="note">'+shape(0)+' no se cumple · '+shape(2)+' se cumple · '+shape(null)+' no aplica</p>'+alt+'</div>';
+  /* Rendimiento vs fondos similares */
+  var box2='<div class="box"><h3>Rendimiento vs mediana de fondos similares (índice 100 hace 6 meses)</h3>';
+  var ps=b.peers&&b.peers.series;
+  if(ps&&ps.fund&&ps.fund.length>1&&ps.cat&&ps.cat.length>1){
+    var norm=function(a){var base=a[0].v;return a.map(function(p){return {x:D(p.f),y:p.v/base*100};});};
+    var fa=norm(ps.fund),ca=norm(ps.cat);
+    var diff=fa[fa.length-1].y-ca[ca.length-1].y;
+    box2+=lineSvg([{name:'Similares',color:'var(--series-b)',pts:ca},{name:'Fondo',color:'var(--accent)',pts:fa}],{aria:'Rendimiento acumulado del fondo contra la mediana de fondos similares',d:1})
+      +'<p class="note">Diferencia acumulada: <b class="mono">'+sgn(diff,1)+' puntos</b> vs la mediana de '+(b.peers.n||'—')+' fondos de la categoría. Posición a 1 / 3 meses / en el año: '
+      +['1m','3m','ytd'].map(function(p){var r=(b.peers.returns||[]).filter(function(x){return x.p===p;})[0];return r&&r.rank?'#'+r.rank+' de '+r.n:'—';}).join(' / ')+'.</p>';
+  } else box2+='<p class="muted">Sin serie de fondos similares disponible.</p>';
+  box2+='</div>';
+  /* Ficha */
+  var cl=(m.patrimonio.clases||[]).map(function(x){return '<tr><td>'+esc(x.fondo.replace(/^.*- /,''))+'</td><td class="mono">'+fARSc(x.patrimonio)+'</td><td>'+(x.incluida?'Incluida':'Sin datos recientes ('+fDate(x.fecha)+')')+'</td></tr>';}).join('');
+  var box6='<div class="box"><h3>Ficha y patrimonio</h3><dl class="kv">'
+    +'<dt>Gestora</dt><dd>'+esc(m.gestora||'—')+'</dd><dt>Categoría</dt><dd>'+esc(m.subcat||'—')+'</dd><dt>Plazo de rescate</dt><dd>T+'+(m.plazo===null?'—':m.plazo)+'</dd>'
+    +'<dt>Calificación</dt><dd>'+esc(m.calif||'—')+'</dd><dt>Comisiones anuales (gestión + custodia + gastos)</dt><dd>'+fx(m.fees,2)+' %</dd>'
+    +'<dt>TNA implícita (rendimiento 30 d)</dt><dd>'+(m.rend.tna===null?'—':fx(m.rend.tna,1)+' %')+'</dd>'
+    +'<dt>Volatilidad 90 d / 1 año</dt><dd>'+(m.vol&&m.vol.d90!==null?fx(m.vol.d90,2):'—')+' % / '+(m.vol&&m.vol.d365!==null?fx(m.vol.d365,2):'—')+' %</dd>'
+    +'<dt>Patrimonio del fondo (suma de clases)</dt><dd>'+fARSc(m.patrimonio.total)+'</dd></dl>'
+    +'<table class="mini" style="margin-top:10px"><thead><tr><th>Clase</th><th>Patrimonio</th><th>Estado</th></tr></thead><tbody>'+cl+'</tbody></table></div>';
+  return '<div class="dgrid">'+box1+box6+'</div>';
+}
+
+function renderComposicion(models){
+  var data=models.map(function(m){var b=S.bundles.filter(function(x){return x.name===m.name;})[0]||{};return {m:m,rows:(b.comp&&b.comp.rows)||[],hasPrev:!!(b.comp&&b.comp.hasPrev),prev:(b.comp&&b.comp.prevSnapshot)||null};});
+  data.sort(function(x,y){var a=x.m.plazo===null?99:x.m.plazo,b=y.m.plazo===null?99:y.m.plazo;return a-b;});
+  var tot={};
+  data.forEach(function(d){d.rows.forEach(function(r){tot[r.tipo]=(tot[r.tipo]||0)+r.pct;});});
+  var tipos=Object.keys(tot).sort(function(a,b){return tot[b]-tot[a];});
+  if(!tipos.length)return '<div class="panel empty"><h2>Composición</h2><p class="muted">Sin datos de composición disponibles.</p></div>';
+  var head='<tr><th scope="col" style="text-align:left">Fondo</th><th scope="col" style="text-align:center">Rescate</th>'+tipos.map(function(t){return '<th scope="col" style="white-space:normal;min-width:84px">'+esc(t)+'</th>';}).join('')+'<th scope="col" style="white-space:normal;min-width:70px">Otros (&lt; 1 %)</th></tr>';
+  var rows=data.map(function(d){
+    var map={},sum=0;
+    d.rows.forEach(function(r){map[r.tipo]=r;sum+=r.pct;});
+    var cells=tipos.map(function(t){
+      var r=map[t];
+      if(!r)return '<td class="mono muted">—</td>';
+      var v=r.pct,dl=d.hasPrev?r.delta:null;
+      if(v<0.05&&(dl===null||Math.abs(dl)<0.5))return '<td class="mono muted">—</td>';
+      var a=Math.round(Math.min(v,100)*0.45),big=dl!==null&&Math.abs(dl)>=S.cfg.compRojo;
+      return '<td class="mono" style="background:color-mix(in srgb,var(--accent) '+a+'%,transparent)'+(big?';box-shadow:inset 0 0 0 2px var(--crit)':'')+'">'+fx(v,1)+' %'+(dl!==null?'<br><span class="dl'+(big?' big':'')+'">('+sgn(dl,1)+' pp)</span>':'')+'</td>';
+    }).join('');
+    var otros=Math.max(0,100-sum);
+    return '<tr><td><span class="nm" style="font-weight:600">'+esc(d.m.name)+'</span><br><span class="muted" style="font-size:12px">'+esc(d.m.subcat||'')+'</span></td><td style="text-align:center"><span class="pill neutral" style="font-family:var(--sans)">'+(d.m.plazo===null?'—':'T+'+d.m.plazo)+'</span></td>'+cells+'<td class="mono muted">'+(otros>=0.5?fx(otros,1)+' %':'—')+'</td></tr>';
+  }).join('');
+  var MESL=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+  function corte(p){ if(!p)return 'al —'; var m=/^(\d{4})-(\d{2})(?:-(\d{2}))?$/.exec(p); if(!m)return 'al '+p; return m[3]?('al '+m[3]+'/'+m[2]+'/'+m[1]):('a '+MESL[+m[2]-1]+' de '+m[1]); }
+  var conPrev=data.filter(function(d){return d.hasPrev&&d.prev;}),cnt={},mayor=null;
+  conPrev.forEach(function(d){cnt[d.prev]=(cnt[d.prev]||0)+1;if(mayor===null||cnt[d.prev]>cnt[mayor])mayor=d.prev;});
+  var nota='';
+  if(conPrev.length){
+    nota='Variación del peso de cada tipo de activo contra la composición del mes anterior (corte '+corte(mayor)+'), en puntos porcentuales (pp).';
+    conPrev.filter(function(d){return d.prev!==mayor;}).forEach(function(d){nota+=' '+esc(d.m.name)+': corte '+corte(d.prev)+'.';});
+  } else nota='No hay composición del mes anterior para calcular variaciones.';
+  var GLOS={
+    'Plazo Fijo':'Depósitos a plazo fijo en bancos.',
+    'Liquidez':'Efectivo y cuentas a la vista en bancos.',
+    'Caución':'Préstamos de corto plazo en el mercado bursátil, garantizados con títulos.',
+    'Tasa Fija ARS':'Instrumentos en pesos con tasa fija, como las LECAP y BONCAP del Tesoro.',
+    'CER':'Instrumentos en pesos ajustados por inflación (CER).',
+    'TAMAR / Flotante':'Instrumentos en pesos con tasa variable, atada a la TAMAR.',
+    'Dual TAMAR/Fija':'Instrumentos que pagan el mayor valor entre la TAMAR y una tasa fija.',
+    'Dual TAMAR/DL':'Instrumentos que pagan el mayor valor entre la TAMAR y el dólar linked.',
+    'Dual CER/TAMAR':'Instrumentos que pagan el mayor valor entre el ajuste CER y la TAMAR.',
+    'Dollar Linked':'Instrumentos en pesos cuyo valor sigue al dólar oficial.',
+    'Pagarés, Cheques y Facturas':'Documentos comerciales de empresas, negociados en el mercado de capitales.',
+    'Corporativo USD':'Obligaciones negociables de empresas, en dólares.',
+    'Hard Dollar Soberano':'Bonos en dólares emitidos por el Estado nacional.',
+    'Hard Dollar Sub-soberano':'Bonos en dólares emitidos por provincias o municipios.',
+    'Provincial ARS':'Títulos en pesos emitidos por provincias.',
+    'BOPREAL':'Bonos en dólares del Banco Central (BOPREAL).',
+    'MM FCI':'Cuotapartes de otros fondos de dinero (money market).',
+    'Futuros':'Contratos de futuros.',
+    'Bancos / Finanzas':'Acciones o deuda de bancos y empresas financieras.',
+    'Energía / O&G':'Acciones o deuda de empresas de energía, petróleo y gas.',
+    'Utilities':'Acciones o deuda de empresas de servicios públicos.',
+    'Materiales / Industria':'Acciones o deuda de empresas de materiales e industria.',
+    'Telecom / Tech':'Acciones o deuda de empresas de telecomunicaciones y tecnología.'
+  };
+  var gl=tipos.map(function(t){return '<dt>'+esc(t)+'</dt><dd>'+esc(GLOS[t]||'Categoría de CAFCI sin definición cargada en esta página.')+'</dd>';}).join('');
+  return '<section class="group"><header><h2>Composición de la cartera de cada fondo</h2><span class="muted">Porcentaje de la cartera por tipo de activo, según CAFCI.</span></header>'
+    +'<div class="tablewrap cscroll"><table style="min-width:'+(340+tipos.length*92)+'px"><thead>'+head+'</thead><tbody>'+rows+'</tbody></table></div><p class="note">'+nota+'</p>'
+    +'<details class="glos" open><summary>Glosario de tipos de activo</summary><dl>'+gl+'</dl><p class="note">Definiciones orientativas; la clasificación de cada tenencia la hace CAFCI a través de Fonditos.</p></details></section>';
+}
+
+function renderCriterios(){
+  var c=S.cfg,live=S.mode==='live';
+  function inp(k,l,step){
+    return live?'<label>'+l+'<input type="number" step="'+(step||1)+'" data-cfg="'+k+'" value="'+c[k]+'" id="cfg-'+k+'"></label>':'<label>'+l+'<span class="ro">'+c[k]+'</span></label>';
+  }
+  var rules=[
+    ['Rendimiento frente a fondos similares','Posición del fondo entre los de su categoría, mes por mes. Se considera bajo desde el percentil indicado (75 = peor cuartil; 100 es el peor). La alarma suena si ocurre en 2 de los últimos 3 meses.',inp('pctPeor','Bajo desde percentil')],
+    ['Flujos','Retiros netos de los últimos 30 días como % del patrimonio total del fondo (todas las clases). Una salida fuerte puede obligar al gestor a vender activos. Es una estimación de Fonditos.',inp('flujoRojo','Alarma desde (%)',0.5)],
+    ['Composición','Mayor cambio, en puntos porcentuales, de un tipo de activo contra el mes anterior.',inp('compRojo','Alarma desde (pp)')],
+    ['Antigüedad del dato','Días entre el último dato del fondo y la consulta. Si se supera, aparece un aviso arriba del tablero (no es una alarma del fondo).',inp('staleRojo','Aviso desde (días)')],
+    ['Revisar salida','Cantidad de alarmas encendidas (de 3) para que aparezca "Revisar salida". La decisión final es siempre humana.',inp('revisarMin','Condiciones necesarias')]
+  ];
+  return '<details class="crit"><summary>Criterios de las alarmas'+(live?' (editables)':'')+'</summary><div class="rules">'
+    +rules.map(function(r){return '<div class="rule"><h3>'+r[0]+'</h3><p>'+r[1]+'</p>'+r[2]+'</div>';}).join('')
+    +'</div></details>';
+}
+
+function renderCriteriosNuevos(models){
+  var c=S.cfg,live=S.mode==='live',tot={};
+  models.forEach(function(m){Object.keys(m.expo||{}).forEach(function(t){tot[t]=(tot[t]||0)+m.expo[t];});});
+  var tipos=Object.keys(tot).sort(function(a,b){return tot[b]-tot[a];});
+  if(c.pref&&tipos.indexOf(c.pref)<0)tipos.push(c.pref);
+  function sw(k){
+    return live?'<label class="sw"><input type="checkbox" data-cfgb="'+k+'" id="cfg-'+k+'"'+(c[k]?' checked':'')+'><span>'+(c[k]?'Sí, se aplica':'No se aplica')+'</span></label>'
+      :'<label class="sw"><span class="ro">'+(c[k]?'Sí, se aplica':'No se aplica')+'</span></label>';
+  }
+  var sel=live?'<label>Preferir fondos con inversión en<select data-cfgs="pref" id="cfg-pref"><option value="">Sin preferencia</option>'
+    +tipos.map(function(t){return '<option value="'+esc(t)+'"'+(c.pref===t?' selected':'')+'>'+esc(t)+'</option>';}).join('')+'</select></label>'
+    :'<label>Preferir fondos con inversión en<span class="ro">'+esc(c.pref||'Sin preferencia')+'</span></label>';
+  var pat=live?'<label>Patrimonio mínimo (mil M de pesos)<input type="number" step="1" data-cfg="patMin" value="'+c.patMin+'" id="cfg-patMin"></label>'
+    :'<label>Patrimonio mínimo (mil M de pesos)<span class="ro">'+c.patMin+'</span></label>';
+  var rules=[
+    ['Solo rescate T+1','Considera solo los fondos T+1 de la cartera (los T+0 rinden todos parecido). Apagado, considera todos.',sw('soloT1')],
+    ['Tamaño','Patrimonio total del fondo (todas las clases) por encima del mínimo. También se usa en la pestaña «Otros fondos».',sw('usaTam')+pat],
+    ['Sin alarmas','El fondo no tiene ninguna alarma encendida.',sw('usaAlarmas')],
+    ['Rendimiento sostenido','No estuvo en el peor cuartil de su categoría en ninguno de los últimos 3 meses cerrados.',sw('usaSost')],
+    ['Le ganó a la inflación','Su rendimiento en el año (hasta el mes del último dato de inflación) superó la inflación acumulada del mismo período.',sw('usaInfl')],
+    ['Elección','Entre los que cumplen, el de mayor rendimiento a 90 días. Si elegís un tipo de inversión, el de mayor peso en ese tipo.',sel]
+  ];
+  return '<details class="crit"><summary>Criterios de nuevos fondos'+(live?' (editables)':'')+'</summary><div class="rules">'
+    +rules.map(function(r){return '<div class="rule"><h3>'+r[0]+'</h3><p>'+r[1]+'</p>'+r[2]+'</div>';}).join('')
+    +'</div></details>';
+}
+
+function renderHeader(){
+  var live=S.mode==='live';
+  var maxF=S.bundles.reduce(function(m,b){return b.ficha&&b.ficha.fecha&&b.ficha.fecha>m?b.ficha.fecha:m;},'');
+  var gen=S.generatedAt?new Date(S.generatedAt):null;
+  var gtxt=gen?gen.toLocaleString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}):'';
+  var nomcp=(S.fatal==='nomcp');
+  var badge=nomcp?'':(live?'<span class="badge">En vivo desde Fonditos</span>':'<span class="badge foto">Foto del '+esc(gtxt)+' · no se actualiza</span>');
+  var btns='';
+  if(live&&!nomcp){
+    btns='<div class="actions"><button class="btn" data-act="refresh"'+(S.loading?' disabled':'')+'>Actualizar</button>'
+      +'<button class="btn primary" data-act="foto"'+((S.canDownload&&!S.loading&&!S.otrosLoading&&S.bundles.length)?'':' disabled')+'>Descargar foto</button></div>';
+  }
+  return '<header class="top"><div class="meta"><span class="eyebrow">Tesorería · Cartera de FCI</span><h1>Monitor de fondos</h1>'
+    +'<span class="muted">'+(maxF?'Datos de CAFCI al '+fDate(maxF)+' · ':'')+(live&&gen?'consultado '+esc(gtxt):'')+'</span></div>'
+    +'<div style="display:flex;flex-direction:column;gap:8px;align-items:flex-end">'+badge+btns+'</div></header>'
+    +'<div class="status" role="status" aria-live="polite">'+esc(S.msg||'')+'</div>';
+}
+
+function errText(e){
+  var code=e&&e.code;
+  if(code==='server_not_connected'||code==='selection_required')return 'Fonditos no está conectado en tu cuenta. Agregalo en Configuración → Conectores y volvé a abrir la página.';
+  if(code==='needs_reauth')return 'La conexión con Fonditos venció. Reconectala en Configuración → Conectores.';
+  if(code==='not_in_manifest'||code==='approval_required'||code==='consent_required')return 'Falta permitir el acceso a Fonditos para esta página.';
+  if(code==='blocked_by_policy')return 'Tu organización bloquea esta herramienta de Fonditos.';
+  if(code==='server_unavailable'||code==='upstream_error')return 'Fonditos no respondió. Probá de nuevo en un momento.';
+  return 'No se pudo consultar ('+(code||'error')+').';
+}
+
+function renderOtros(models){
+  if(S.otrosLoading)return '<div class="panel"><h2>Buscando otros fondos…</h2><p class="muted" style="margin-bottom:10px">Consultando el ranking de fondos T+1 y sus datos.</p><div class="skel" style="width:70%"></div></div>';
+  if(S.otrosErr)return '<div class="panel empty"><h2>Otros fondos</h2><p class="muted">'+esc(S.otrosErr)+'</p></div>';
+  if(!S.otros)return '<div class="panel empty"><h2>Otros fondos</h2><p class="muted">'+(S.mode==='foto'?'Esta foto no incluye la búsqueda de otros fondos.':'Todavía no se consultó. Usá «Actualizar».')+'</p></div>';
+  var sec=otrosSecciones(models,S.cfg),best=sec.best;
+  function linea(tit,arr,sinTxt){
+    if(!arr.length)return '<p><b>'+tit+':</b> '+sinTxt+'</p>';
+    var c=arr[0];
+    if(best&&c.d90>best.rend.d90)return '<p><b>'+tit+':</b> <b>'+esc(baseName(c.fondo))+'</b> ('+esc(c.gestora)+(c.clase?', clase '+esc(c.clase):'')+') rindió '+fx(c.d90-best.rend.d90,2)+' puntos más que nuestro mejor fondo T+1 a 90 días ('+fx(c.d90,2)+' % contra '+fx(best.rend.d90,2)+' %).</p>';
+    return '<p><b>'+tit+':</b> ninguno le ganó a nuestro mejor fondo T+1 a 90 días ('+esc(best?best.name:'—')+', '+fx(best?best.rend.d90:null,2)+' %).</p>';
+  }
+  var globo='<section class="sugg" aria-label="Sugerencia"><span class="stag">Sugerencia</span><div>'
+    +linea('Con gestoras donde ya operamos',sec.con,'no hay fondos que cumplan el patrimonio mínimo.')
+    +linea('Habría que abrir cuenta',sec.sin,'no hay fondos que cumplan el patrimonio mínimo.')+'</div></section>';
+  function tabla(tit,sub,arr){
+    var head='<tr><th scope="col" style="text-align:left">Fondo</th><th scope="col" style="text-align:left">Gestora</th><th scope="col" style="text-align:center">Clase</th><th scope="col">Patrimonio</th><th scope="col">30 D</th><th scope="col">90 D</th><th scope="col">Año</th><th scope="col">vs. nuestro mejor (90 D)</th></tr>';
+    var rows=arr.map(function(c){
+      var dif=best?c.d90-best.rend.d90:null;
+      return '<tr><td><span class="nm" style="font-weight:600">'+esc(baseName(c.fondo))+'</span></td><td style="text-align:left;white-space:normal">'+esc(c.gestora)+'</td><td style="text-align:center">'+esc(c.clase||'—')+'</td><td class="mono">'+fARSc(c.pat)+'</td>'
+        +'<td class="mono">'+(c.d30===null?'—':fx(c.d30,2)+' %')+'</td><td class="mono">'+fx(c.d90,2)+' %</td><td class="mono">'+(c.ytd===null?'—':fx(c.ytd,2)+' %')+'</td>'
+        +'<td class="mono" style="'+(dif!==null&&dif>0?'color:var(--ok);font-weight:600':'')+'">'+(dif===null?'—':sgn(dif,2)+' pp')+'</td></tr>';
+    }).join('');
+    return '<section class="group"><header><h2>'+tit+'</h2><span class="muted">'+sub+'</span></header><div class="tablewrap"><table style="min-width:860px"><thead>'+head+'</thead><tbody>'+(rows||'<tr><td colspan="8" style="text-align:left" class="muted">Ningún fondo cumple el patrimonio mínimo.</td></tr>')+'</tbody></table></div></section>';
+  }
+  var t1=tabla('Gestoras donde ya operamos','Se podría pasar sin abrir cuenta nueva.',sec.con);
+  var t2=tabla('Habría que abrir cuenta','Gestoras con las que hoy no operamos.',sec.sin);
+  var nota='<p class="note">Fondos T+1 en pesos de Fonditos que no están en la cartera. De cada fondo se muestra la clase que más rindió a 90 días: qué clase corresponde a la empresa y su mínimo de inversión lo confirma la gestora. Se excluyen las clases de la Ley N° 27.743.</p>';
+  return globo+t1+t2+renderRankingOtros(models,sec)+nota;
+}
+
+function renderRankingOtros(models,sec){
+  var k=S.cmp2||'d90',infV=inflPeriodo(k);
+  var items=[];
+  sec.ownT1.forEach(function(m){items.push({n:m.name,v:m.rend[k],t:'own'});});
+  sec.con.forEach(function(c){items.push({n:c.fondo,v:c[k],t:'con'});});
+  sec.sin.forEach(function(c){items.push({n:c.fondo,v:c[k],t:'sin'});});
+  if(infV!==null)items.push({n:'Inflación ('+MESES[+INFLACION.mes.slice(5,7)-1]+'-'+INFLACION.mes.slice(2,4)+')',v:infV,t:'infl'});
+  items=items.filter(function(x){return x.v!==null;}).sort(function(a,b){return b.v-a.v;});
+  if(!items.length)return '';
+  var mx=Math.max.apply(null,items.map(function(x){return x.v;}).concat([0.0001]));
+  var col={own:'#d93a3a',con:'#f08a1c',sin:'#2f9e57',infl:'#f2c300'};
+  var seg='<div class="seg" role="group" aria-label="Período">'+CMP.map(function(c){return '<button class="segb" data-act="cmp2" data-p="'+c[0]+'" aria-pressed="'+(k===c[0])+'">'+c[1]+'</button>';}).join('')+'</div>';
+  var leg='<div class="legend"><span><i style="background:#d93a3a"></i>Nuestros fondos</span><span><i style="background:#f08a1c"></i>Gestoras donde ya operamos</span><span><i style="background:#2f9e57"></i>Habría que abrir cuenta</span><span><i style="background:#f2c300"></i>Inflación</span></div>';
+  var rows=items.map(function(x){
+    return '<div class="hb'+(x.t==='infl'?' infl':'')+'"><span class="hn" title="'+esc(x.n)+'">'+esc(x.n)+'</span><span class="ht"><i style="width:'+Math.max(0,x.v/mx*100).toFixed(1)+'%;background:'+col[x.t]+'"></i></span><span class="hv mono">'+fx(x.v,2)+' %</span></div>';
+  }).join('');
+  return '<section class="panel cmp" aria-label="Ranking de rendimiento"><div class="cmph"><h2>Ranking de fondos T+1</h2>'+seg+'</div>'+leg+rows+'</section>';
+}
+
+function renderAll(){
+  var el=document.getElementById('app');if(!el)return;
+  var h=renderHeader();
+  if(S.fatal==='nomcp'){
+    h+='<div class="panel empty"><h2>Esta página consulta Fonditos desde Claude</h2><p class="muted">Abrila desde tu cuenta de Claude para ver los datos en vivo. Si te enviaron una foto, abrí ese archivo: los datos van incluidos.</p></div>';
+    el.innerHTML=h;return;
+  }
+  if(S.fatal){ h+='<div class="banner crit" role="alert">'+esc(S.fatal)+'</div>'; }
+  var models=[],errs=[];
+  S.bundles.forEach(function(b){ if(b.error)errs.push(b); else { try{models.push(analyze(b,S.cfg,S.tasas));}catch(e){errs.push({name:b.name,error:{code:'calc'}});} } });
+  if(S.loading){
+    h+='<div class="panel"><h2>Consultando Fonditos…</h2><p class="muted" style="margin-bottom:10px">'+S.loading.done+' de '+S.loading.total+' fondos</p><div class="skel" style="width:70%"></div></div>';
+  }
+  assignAlt(models);
+  if(models.length){
+    var viejos=models.filter(function(m){return m.checks.datos.sev===2;});
+    if(viejos.length)h+='<div class="banner" role="status"><b>Datos desactualizados:</b> '+viejos.map(function(m){return esc(m.name)+' (último dato hace '+m.checks.datos.age+' días)';}).join(' · ')+'. Sus números pueden no reflejar la situación actual.</div>';
+    h+='<nav class="tabs" role="tablist" aria-label="Vistas">'+[['resumen','Resumen'],['comp','Composición'],['otros','Otros fondos']].map(function(t){return '<button class="tab" role="tab" data-act="tab" data-t="'+t[0]+'" aria-selected="'+(S.tab===t[0])+'">'+t[1]+'</button>';}).join('')+'</nav>';
+    if(S.tab==='comp'){ h+=renderComposicion(models); }
+    else if(S.tab==='otros'){ h+=renderOtros(models)+renderCriteriosNuevos(models); }
+    else {
+      h+=renderSummary(models)+renderSugerencia(models);
+      var groups={};
+      models.forEach(function(m){var k=m.plazo===null?99:m.plazo;(groups[k]=groups[k]||[]).push(m);});
+      Object.keys(groups).sort(function(a,b){return a-b;}).forEach(function(k){h+=renderGroup(plazoLabel(+k===99?null:+k),groups[k]);});
+    }
+  }
+  if(errs.length){
+    h+='<section class="group"><header><h2>Fondos que no se pudieron consultar</h2></header><div class="tablewrap"><table><tbody>'
+      +errs.map(function(b){return '<tr class="err"><td>'+esc(b.name)+'</td><td style="text-align:left;white-space:normal">'+esc(errText(b.error))+'</td></tr>';}).join('')+'</tbody></table></div>'
+      +(S.mode==='live'?'<div class="actions"><button class="btn" data-act="refresh">Reintentar</button></div>':'')+'</section>';
+  }
+  if(models.length&&S.tab==='resumen')h+=renderCompare(models)+renderCriterios()+renderCriteriosNuevos(models);
+  if(S.tab==='resumen')h+='<footer class="foot"><span><b>Patrimonio:</b> suma de las clases del fondo con datos de los últimos 7 días, expresado en miles de millones de pesos (mil M). Las comisiones se informan por clase.</span>'
+    +'<span><b>Flujos:</b> estimación de Fonditos (datos CAFCI) para el fondo completo, sobre su patrimonio actual.</span>'
+    +'<span><b>Volatilidad:</b> de los últimos 90 días. Es el desvío de los retornos diarios por día corrido, anualizado (×√365). Evita que los fines de semana y feriados parezcan riesgo. Es un dato informativo: no entra en las alarmas ni en la señal de salida.</span>'
+    +'<span>Datos CAFCI vía Fonditos, con un día hábil de demora. Las señales ordenan la revisión; no son una recomendación de inversión.</span></footer>';
+  el.innerHTML=h;
+}
+
+/* ================= Datos en vivo ================= */
+var INFL={};
+function callF(tool,input){
+  var key=tool+'|'+JSON.stringify(input);
+  if(INFL[key])return INFL[key];
+  var p=(async function(){
+    var r=await MCP.callTool(SERVER,tool,input,{cache:{staleTime:300000,gcTime:900000}});
+    var pl=r.payload;
+    if(typeof pl==='string'){try{pl=JSON.parse(pl);}catch(e){}}
+    return pl;
+  })();
+  INFL[key]=p;
+  p.then(function(){setTimeout(function(){delete INFL[key];},0);},function(){delete INFL[key];});
+  return p;
+}
+async function safe(fn){ try{return {ok:true,v:await fn()};}catch(e){return {ok:false,e:e};} }
+
+function slimBundle(name,R){
+  var fi=R.ficha.v,da=fi.datos_actuales||{},me=fi.metricas||{};
+  var b={name:name,fetchedAt:new Date().toISOString()};
+  b.ficha={gestora:fi.gestora,subcategoria:fi.subcategoria,clase:fi.clase,categoria:da.categoria,fecha:da.fecha,patrimonio:da.patrimonio,calificacion:da.calificacion,
+    fee_gestion:da.fee_gestion,fee_depositaria:da.fee_depositaria,gastos_gestion:da.gastos_gestion,plazo_rescate:da.plazo_rescate,
+    rend_30d:me.rend_30d,rend_30d_dias:me.rend_30d_dias,rend_90d:me.rend_90d,rend_ytd:me.rend_ytd,rend_1y:me.rend_1y};
+  var base=baseName(name);
+  var rows=(R.cls.ok&&R.cls.v&&R.cls.v.data)||[];
+  b.patrimonio=sumClases(rows,base);
+  if(R.peers.ok&&R.peers.v){
+    var p=R.peers.v,ld=p.last_date||da.fecha||'';
+    var cut=ld?addDays(ld,-185):'';
+    var pick=function(a){return (a||[]).filter(function(x){return x.fecha>=cut;}).map(function(x){return {f:x.fecha,v:x.vcp_norm};});};
+    b.peers={lastDate:ld,n:p.n_funds_categoria,
+      series:{fund:pick(p.series&&p.series.fund),cat:pick(p.series&&p.series.category)},
+      returns:(p.period_returns||[]).filter(function(x){return ['1m','3m','ytd','1y'].indexOf(x.period)>=0;}).map(function(x){return {p:x.period,fund:x.fund,med:x.category_median,pct:x.percentile,rank:x.rank,n:x.n_funds};}),
+      monthly:(p.monthly_returns||[]).slice(-5).map(function(x){return {m:x.month,fund:x.fund,med:x.category_median,pct:x.percentile,rank:x.rank,n:x.n_funds,mtd:!!x.mtd};})};
+  } else b.peers=null;
+  if(R.comp.ok&&R.comp.v&&R.comp.v.rows){
+    var c=R.comp.v;
+    b.comp={hasPrev:!!c.has_prev,prevSnapshot:c.prev_snapshot,divergente:!!c.divergente,
+      rows:c.rows.filter(function(r){return r.fund_pct>=1||(r.prev_pct||0)>=1||r.median_pct>=1;}).map(function(r){return {tipo:r.tipo,pct:r.fund_pct,med:r.median_pct,prev:r.prev_pct||0,delta:r.delta_pct||0};})};
+  } else b.comp=null;
+  if(R.serie.ok&&R.serie.v&&R.serie.v.data){
+    var sr=R.serie.v.data.map(function(x){return {f:x.fecha,v:x.vcp};});
+    b.vol=volStats(sr);
+    b.ytdInfl=ytdTo(sr,INFLACION.mes);
+  } else {b.vol=null;b.ytdInfl=null;}
+  b.flows=R.flows||null;
+  return b;
+}
+
+async function fetchBundle(name){
+  var R={};
+  var calls=await Promise.all([
+    safe(function(){return callF('ficha_fondo',{fondo:name});}),
+    safe(function(){return callF('buscar_fondos',{q:baseName(name),limite:50});}),
+    safe(function(){return callF('rendimiento_vs_peers',{fondo:name});}),
+    safe(function(){return callF('tenencias_vs_peers',{fondo:name});}),
+    safe(function(){return callF('serie_fondo',{fondo:name,dias:420});})
+  ]);
+  R.ficha=calls[0];R.cls=calls[1];R.peers=calls[2];R.comp=calls[3];R.serie=calls[4];
+  if(!R.ficha.ok||!R.ficha.v||!R.ficha.v.datos_actuales){
+    return {name:name,error:R.ficha.ok?{code:'sin_datos'}:{code:R.ficha.e&&R.ficha.e.code,message:R.ficha.e&&R.ficha.e.message}};
+  }
+  var da=R.ficha.v.datos_actuales,sub=R.ficha.v.subcategoria,cl=R.ficha.v.clase;
+  var extra=[];
+  extra.push(fetchFlows(R.ficha.v.gestora,baseName(name),da.fecha).then(function(x){R.flows=x;}));
+  await Promise.all(extra);
+  return slimBundle(name,R);
+}
+
+async function fetchFlows(gestora,base,fecha){
+  if(!gestora||!fecha)return null;
+  var hasta=new Date().toISOString().slice(0,10),desde=addDays(hasta,-30);
+  var r=await safe(function(){return callF('flujo_por_fondo',{gestora:gestora,from:desde,to:hasta});});
+  if(!r.ok||!r.v||!r.v.rows)return null;
+  var row=r.v.rows.filter(function(x){return x.fondo===base;})[0];
+  return (row&&num(row.flujo_ars)!==null)?{desde:desde,hasta:hasta,flujo:row.flujo_ars}:null;
+}
+
+async function fetchTasas(){
+  var r=await safe(function(){return callF('tasas_mercado',{});});
+  if(!r.ok||!r.v||!r.v.tasas)return null;
+  var t=r.v.tasas,d=r.v.dolares||{},br=r.v.brechas||{};
+  function dol(x){return x&&num(x.valor)!==null?{valor:x.valor,fecha:x.fecha}:null;}
+  return {fecha:r.v.fecha,
+    caucion:t.caucion?{tna:t.caucion.tna,tea:t.caucion.tea,fecha:t.caucion.fecha}:null,
+    tamar:t.tamar?{tna:t.tamar.tna,tea:t.tamar.tea,fecha:t.tamar.fecha}:null,
+    ccl:dol(d.ccl),oficial:dol(d.oficial_a3500),brechaCclOficial:num(br.ccl_oficial)};
+}
+
+async function refreshAll(){
+  if(S.loading)return;
+  S.loading={done:0,total:FONDOS.length};S.fatal=null;S.msg='';S.bundles=[];S.otros=null;S.otrosErr='';renderAll();
+  var tp=fetchTasas().then(function(t){S.tasas=t;});
+  var idx=0,out=new Array(FONDOS.length);
+  async function worker(){
+    while(idx<FONDOS.length){
+      var i=idx++;
+      var b;
+      try{b=await fetchBundle(FONDOS[i]);}catch(e){b={name:FONDOS[i],error:{code:e&&e.code}};}
+      out[i]=b;S.loading.done++;
+      S.bundles=out.filter(Boolean);renderAll();
+    }
+  }
+  await Promise.all([worker(),worker(),worker(),tp]);
+  S.bundles=out.filter(Boolean);
+  var allErr=S.bundles.length&&S.bundles.every(function(b){return b.error;});
+  if(allErr){S.fatal=errText(S.bundles[0].error);}
+  S.loading=null;S.generatedAt=new Date().toISOString();
+  S.msg=allErr?'':'Actualizado.';
+  renderAll();
+  if(!allErr)loadOtros();
+}
+
+/* ================= Foto descargable ================= */
+function buildPhotoHtml(){
+  var cssEl=document.getElementById('app-css'),jsEl=document.getElementById('app-js');
+  if(!cssEl||!jsEl)return null;
+  var snap={version:1,generatedAt:S.generatedAt,cfg:S.cfg,tasas:S.tasas,otros:S.otros,bundles:S.bundles.filter(function(b){return !b.error;})};
+  var json=JSON.stringify(snap).replace(/</g,'\\u003c');
+  return '<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Monitor de Fondos</title>'
+    +'<link rel="stylesheet" href="'+FONT_LINK+'"><style>'+cssEl.textContent+'</style></head><body><div id="app" class="wrap"></div>'
+    +'<script>window.__SNAPSHOT__='+json+';<\/script><script id="app-js">'+jsEl.textContent+'<\/script></body></html>';
+}
+async function descargarFoto(){
+  if(!DL){S.msg='La descarga no está disponible en esta vista.';renderAll();return;}
+  var html=buildPhotoHtml();
+  if(!html){S.msg='No se pudo armar la foto.';renderAll();return;}
+  var d=(S.generatedAt||new Date().toISOString()).slice(0,10).replace(/-/g,'');
+  try{
+    await DL.save({filename:'monitor-fondos-'+d+'.html',data:html});
+    S.msg='Foto guardada. Es un archivo HTML que se abre con doble clic, sin conexión.';
+  }catch(e){
+    S.msg=(e&&e.code==='declined')?'Descarga cancelada.':'No se pudo descargar la foto ('+((e&&e.code)||'error')+').';
+  }
+  renderAll();
+}
+
+/* ================= Eventos y arranque ================= */
+function saveCfg(){ try{localStorage.setItem('mfondos.cfg',JSON.stringify(S.cfg));}catch(e){} }
+function loadCfg(){ try{var s=localStorage.getItem('mfondos.cfg');if(s)S.cfg=Object.assign({},DEFAULT_CFG,JSON.parse(s));}catch(e){} }
+
+function bind(){
+  var el=document.getElementById('app');
+  el.addEventListener('click',function(ev){
+    var t=ev.target.closest('[data-act]');if(!t)return;
+    var a=t.getAttribute('data-act');
+    if(a==='open'){var n=t.getAttribute('data-n');S.open[n]=!S.open[n];renderAll();}
+    else if(a==='sort'){var k=t.getAttribute('data-k');if(S.sort.key===k)S.sort.dir*=-1;else{S.sort.key=k;S.sort.dir=(k==='name')?1:-1;}renderAll();}
+    else if(a==='cmp'){S.cmp=t.getAttribute('data-p');renderAll();}
+    else if(a==='cmp2'){S.cmp2=t.getAttribute('data-p');renderAll();}
+    else if(a==='tab'){S.tab=t.getAttribute('data-t');renderAll();}
+    else if(a==='refresh'){refreshAll();}
+    else if(a==='foto'){descargarFoto();}
+  });
+  el.addEventListener('change',function(ev){
+    var t=ev.target;if(!t.getAttribute)return;
+    var ks=t.getAttribute('data-cfgs'),kb=t.getAttribute('data-cfgb'),k=t.getAttribute('data-cfg'),id;
+    if(ks){S.cfg[ks]=t.value;id='cfg-'+ks;}
+    else if(kb){S.cfg[kb]=t.checked?1:0;id='cfg-'+kb;}
+    else if(k){var v=parseFloat(t.value);if(!isFinite(v))return;S.cfg[k]=v;id='cfg-'+k;}
+    else return;
+    saveCfg();
+    var opens=Array.prototype.map.call(document.querySelectorAll('details.crit'),function(d){return d.open;});
+    renderAll();
+    Array.prototype.forEach.call(document.querySelectorAll('details.crit'),function(d,i){if(opens[i])d.open=true;});
+    var inp=document.getElementById(id);if(inp)inp.focus();
+  });
+}
+
+async function getCap(name){
+  try{ if(!window.claude||!window.claude.use)return null; return await window.claude.use(name); }catch(e){return null;}
+}
+
+async function boot(){
+  bind();
+  if(SNAP){
+    S.mode='foto';S.cfg=Object.assign({},DEFAULT_CFG,SNAP.cfg||{});S.bundles=SNAP.bundles||[];S.tasas=SNAP.tasas||null;S.otros=SNAP.otros||null;S.generatedAt=SNAP.generatedAt;
+    renderAll();return;
+  }
+  loadCfg();
+  S.loading={done:0,total:FONDOS.length};renderAll();
+  var caps=await Promise.all([getCap('mcp'),getCap('downloads')]);
+  MCP=caps[0];DL=caps[1];S.canDownload=!!DL;S.loading=null;
+  if(!MCP){S.fatal='nomcp';renderAll();return;}
+  await refreshAll();
+}
+
+if(typeof module!=='undefined'&&module.exports){
+  module.exports={analyze:analyze,candidatosDe:candidatosDe,inflPeriodo:inflPeriodo,ytdTo:ytdTo,pickSugerencia:pickSugerencia,assignAlt:assignAlt,volStats:volStats,sumClases:sumClases,baseName:baseName,DEFAULT_CFG:DEFAULT_CFG,lineSvg:lineSvg,barSvg:barSvg};
+}
+if(typeof document!=='undefined'){ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot); else boot(); }
+})();
+</script></body></html>
