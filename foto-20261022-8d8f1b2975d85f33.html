@@ -1,0 +1,210 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Monitor de Fondos</title><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap"><style>
+/* Concepto: tablero de tesorería para el CFO. Primero el resumen y las alarmas, después la tabla comparativa y, al abrir un fondo, la evidencia (pares, flujos, composición, duración). */
+:root{
+  --bg:#F2F5F8; --surface:#FFFFFF; --surface-2:#E9EEF3; --ink:#13202B; --ink-2:#44545F; --ink-3:#5A6976;
+  --line:#D5DDE5; --accent:#0B5C7A; --accent-ink:#FFFFFF; --series-b:#7C8A97;
+  --ok:#17703F; --ok-bg:#E1F2E8; --warn:#8F5A00; --warn-bg:#FBEFD5; --crit:#B3261E; --crit-bg:#FBE3E0;
+  --sans:'IBM Plex Sans',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+  --mono:'IBM Plex Mono',ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0E161D; --surface:#151F28; --surface-2:#1C2833; --ink:#E6EDF3; --ink-2:#B3C0CC; --ink-3:#93A2B0;
+    --line:#2A3846; --accent:#5BB8DB; --accent-ink:#06222E; --series-b:#8FA0AF;
+    --ok:#5BD08F; --ok-bg:#12301F; --warn:#F0B64D; --warn-bg:#33270F; --crit:#FF8A80; --crit-bg:#3A1816;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0E161D; --surface:#151F28; --surface-2:#1C2833; --ink:#E6EDF3; --ink-2:#B3C0CC; --ink-3:#93A2B0;
+  --line:#2A3846; --accent:#5BB8DB; --accent-ink:#06222E; --series-b:#8FA0AF;
+  --ok:#5BD08F; --ok-bg:#12301F; --warn:#F0B64D; --warn-bg:#33270F; --crit:#FF8A80; --crit-bg:#3A1816;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:14px;line-height:1.45;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:20px 48px}
+.wrap{max-width:1200px;margin:0 auto;display:flex;flex-direction:column;gap:20px}
+h1,h2,h3{margin:0;font-weight:600;text-wrap:balance}
+h1{font-size:22px;letter-spacing:-.01em}
+h2{font-size:15px}
+h3{font-size:13px;color:var(--ink-2)}
+p{margin:0}
+.muted{color:var(--ink-3)}
+.mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
+button{font:inherit;color:inherit;cursor:pointer}
+button:focus-visible,summary:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+/* Encabezado */
+.top{display:flex;flex-wrap:wrap;gap:12px 24px;align-items:flex-end;justify-content:space-between}
+.top .meta{display:flex;flex-direction:column;gap:2px;min-width:0}
+.eyebrow{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);font-weight:500}
+.actions{display:flex;gap:8px;flex-wrap:wrap}
+.btn{border:1px solid var(--line);background:var(--surface);border-radius:6px;padding:7px 12px;font-weight:500}
+.btn:hover{border-color:var(--accent)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.btn[disabled]{opacity:.55;cursor:default}
+.badge{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:999px;padding:2px 10px;font-size:12px;background:var(--surface);color:var(--ink-2)}
+.badge.foto{border-color:var(--warn);color:var(--warn);background:var(--warn-bg)}
+.status{font-size:12px;color:var(--ink-3);min-height:18px}
+
+/* Resumen */
+.summary{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.6fr);gap:16px}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:16px;min-width:0}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-top:10px}
+.tile{display:flex;align-items:center;gap:10px;border:1px solid var(--line);border-radius:6px;padding:10px 12px}
+.tile b{font-size:22px;font-weight:600;font-family:var(--mono);line-height:1}
+.tile span.l{font-size:12px;color:var(--ink-2)}
+.ctx{margin-top:12px;font-size:12px;color:var(--ink-3);display:flex;gap:6px 16px;flex-wrap:wrap}
+.alerts{list-style:none;margin:10px 0 0;padding:0;display:flex;flex-direction:column;gap:8px}
+.alerts li{display:flex;gap:10px;align-items:flex-start;padding:8px 10px;border-radius:6px;background:var(--surface-2)}
+.alerts li .t{min-width:0}
+.alerts li strong{font-weight:600}
+
+/* Señales (forma + texto, nunca solo color) */
+.sg{display:inline-block;width:11px;height:11px;flex:none;vertical-align:-1px}
+.sg.s0{background:var(--ok);border-radius:50%}
+.sg.s1{background:var(--warn);clip-path:polygon(50% 0,100% 100%,0 100%)}
+.sg.s2{background:var(--crit);border-radius:1px}
+.sg.sn{border:2px solid var(--ink-3);border-radius:50%;width:11px;height:11px}
+.pill{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:2px 9px;font-size:12px;font-weight:500;white-space:nowrap}
+.pill.s0{background:var(--ok-bg);color:var(--ok)}
+.pill.s1{background:var(--warn-bg);color:var(--warn)}
+.pill.s2{background:var(--crit-bg);color:var(--crit)}
+.pill.sn{background:var(--surface-2);color:var(--ink-2)}
+.pill.neutral{background:var(--surface-2);color:var(--ink-2)}
+
+/* Tabla */
+.group{display:flex;flex-direction:column;gap:8px}
+.group>header{display:flex;flex-wrap:wrap;gap:4px 12px;align-items:baseline}
+.tablewrap{overflow-x:auto;background:var(--surface);border:1px solid var(--line);border-radius:8px;container-type:inline-size}
+table{border-collapse:separate;border-spacing:0;width:100%;min-width:960px;font-size:13px}
+th,td{padding:9px 8px;text-align:right;border-bottom:1px solid var(--line);white-space:nowrap;vertical-align:middle}
+.patc{display:flex;flex-direction:column;align-items:flex-end;gap:3px}
+th{font-size:11px;letter-spacing:.04em;text-transform:uppercase;color:var(--ink-3);font-weight:500;background:var(--surface)}
+th button{background:none;border:0;padding:0;font:inherit;letter-spacing:inherit;text-transform:inherit;color:inherit;display:inline-flex;gap:4px;align-items:center}
+th button:hover{color:var(--ink)}
+.sa{font-size:.9em}.sa.off{opacity:.35}th button:hover .sa.off{opacity:.8}
+th:first-child,td:first-child{text-align:left;position:sticky;left:0;background:var(--surface);z-index:1;min-width:210px;max-width:250px;white-space:normal;padding-left:12px}
+tr:last-child>td{border-bottom:0}
+.rowbtn{background:none;border:0;padding:0;text-align:left;display:block;width:100%}
+.rowbtn .nm{font-weight:600;display:flex;gap:6px;align-items:center}
+.rowbtn .sub{font-size:12px;color:var(--ink-3)}
+.rowbtn .chev{display:inline-block;width:8px;height:8px;border-right:2px solid var(--ink-3);border-bottom:2px solid var(--ink-3);transform:rotate(-45deg);transition:transform .15s;flex:none}
+.rowbtn[aria-expanded="true"] .chev{transform:rotate(45deg)}
+td.best{font-weight:600}
+td.best::after{content:"▲";font-size:8px;margin-left:4px;color:var(--accent);vertical-align:2px}
+.chips{display:inline-flex;flex-wrap:wrap;gap:4px;max-width:260px;justify-content:flex-start}
+td.chipcell{white-space:normal;text-align:left}
+.chip{display:inline-flex;align-items:center;gap:4px;font-size:11px;border:1px solid var(--line);border-radius:4px;padding:1px 5px;color:var(--ink-2)}
+.dl{font-size:11px;color:var(--ink-2)}
+.dl.big{color:var(--crit);font-weight:600}
+.chip.al{border-color:var(--crit);background:var(--crit-bg);color:var(--crit)}
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--line)}
+.tab{background:none;border:0;border-bottom:2px solid transparent;padding:8px 14px;font-weight:500;color:var(--ink-3);margin-bottom:-1px}
+.tab:hover{color:var(--ink)}
+.tab[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--accent)}
+tr.detail>td{background:var(--bg);padding:14px 0;white-space:normal;text-align:left;position:static;max-width:none}
+tr.detail .dgrid{padding:0 12px}
+tr.err td{color:var(--crit)}
+.dwrap{position:sticky;left:0;width:calc(100vw - 2*max(16px,env(safe-area-inset-left,0px)) - 2px);max-width:1150px}
+@supports (width:1cqw){.dwrap{width:100cqw;max-width:none}}
+
+/* Detalle */
+.dgrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.box{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:14px;min-width:0}
+.box h3{margin-bottom:8px}
+.conds{list-style:none;margin:8px 0 0;padding:0;display:flex;flex-direction:column;gap:6px}
+.conds li{display:flex;gap:8px;align-items:flex-start;font-size:13px}
+.conds .v{margin-left:auto;font-family:var(--mono);font-size:12px;color:var(--ink-2);white-space:nowrap;padding-left:8px}
+.verdict{display:flex;gap:8px;align-items:center;font-weight:600;margin-bottom:4px}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:4px 14px;font-size:13px}
+.kv dt{color:var(--ink-3)} .kv dd{margin:0;text-align:right;font-family:var(--mono);font-size:12px}
+.mini{width:100%;border-collapse:collapse;min-width:0;font-size:12px}
+.mini th,.mini td{padding:4px 6px;border-bottom:1px solid var(--line);text-align:right;position:static;background:none;text-transform:none;letter-spacing:0;font-size:12px}
+.mini th{color:var(--ink-3);font-weight:500}
+.mini th:first-child,.mini td:first-child{text-align:left;min-width:0;max-width:none;white-space:normal}
+.bar2{display:flex;flex-direction:column;gap:2px;min-width:90px}
+.bar2 i{display:block;height:4px;border-radius:2px;background:var(--accent)}
+.bar2 i.b{background:var(--series-b)}
+svg.ch{width:100%;height:auto;display:block;overflow:visible}
+svg.ch text{font-family:var(--sans);font-size:11px;fill:var(--ink-3)}
+svg.ch text.v{fill:var(--ink);font-weight:500}
+svg.ch .grid{stroke:var(--line);stroke-width:1}
+svg.ch .axis{stroke:var(--ink-3);stroke-width:1}
+.group>.tablewrap>table>thead th{position:sticky;top:0;z-index:3;border-bottom:1px solid var(--line)}
+.group>.tablewrap>table>thead th:first-child{z-index:5}
+@media (min-width:1040px){.group>.tablewrap:not(.cscroll){overflow:clip}}
+@media (max-width:1039px){.group>.tablewrap:not(.cscroll){max-height:80vh;overflow:auto}}
+.cscroll{max-height:75vh;overflow:auto}
+.cscroll th{position:sticky;top:0;z-index:3;border-bottom:1px solid var(--line)}
+.cscroll th:first-child{z-index:5}
+.glos{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:12px 16px}
+.glos summary{font-weight:600;cursor:pointer}
+.glos dl{display:grid;grid-template-columns:minmax(150px,220px) 1fr;gap:6px 16px;margin:10px 0;font-size:13px}
+.glos dt{font-weight:600}.glos dd{margin:0;color:var(--ink-2)}
+@media (max-width:640px){.glos dl{grid-template-columns:1fr}.glos dd{margin-bottom:6px}}
+.rule label:has(select){flex-direction:column;align-items:stretch;gap:6px}
+.rule .sw{justify-content:flex-start;gap:8px;cursor:pointer}
+.rule .sw input{width:16px;height:16px;accent-color:var(--accent)}
+.sugg{display:flex;gap:14px;align-items:flex-start;background:var(--surface);border:1px solid var(--line);border-left:4px solid var(--accent);border-radius:8px;padding:14px 16px}
+.sugg p{margin:0 0 4px;font-size:14px}.sugg .note{font-size:12px;margin:4px 0 0}
+.stag{flex:none;background:var(--accent);color:var(--accent-ink);font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;padding:3px 8px;border-radius:4px}
+.rule select{padding:6px 8px;font:inherit;border:1px solid var(--line);border-radius:6px;background:var(--surface);color:var(--ink);max-width:100%}
+@media (max-width:640px){.sugg{flex-direction:column;gap:8px}}
+.win{margin-top:14px;padding-top:12px;border-top:1px solid var(--line)}
+.win h3{font-size:13px;margin:0 0 6px}
+.win .hb{grid-template-columns:minmax(0,170px) 1fr 74px}
+.win .hv{white-space:nowrap}
+.win .note{margin-top:6px}
+.cmph{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:10px}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:6px;overflow:hidden}
+.segb{background:var(--surface);border:0;padding:6px 12px;font-size:13px;color:var(--ink-2);cursor:pointer}
+.segb+.segb{border-left:1px solid var(--line)}
+.segb[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink)}
+.hgrp{margin-top:14px}.hgrp h3{font-size:13px;margin:0 0 6px}
+.hb{display:grid;grid-template-columns:minmax(120px,230px) 1fr 70px;gap:10px;align-items:center;padding:3px 0;font-size:13px}
+.hn{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ht{background:color-mix(in srgb,var(--line) 45%,transparent);border-radius:3px;height:14px;display:block;overflow:hidden}
+.ht i{display:block;height:100%;background:var(--accent);border-radius:3px}
+.hv{text-align:right}
+.hb.infl .hn{font-weight:600;color:var(--warn)}
+.hb.infl .hv{font-weight:600}
+@media (max-width:640px){.hb{grid-template-columns:minmax(0,1fr) 70px}.hb .ht{grid-column:1/3;grid-row:2}}
+.legend{display:flex;gap:14px;font-size:12px;color:var(--ink-2);margin-bottom:6px;flex-wrap:wrap}
+.legend i{display:inline-block;width:14px;height:3px;border-radius:2px;margin-right:6px;vertical-align:3px}
+.note{font-size:12px;color:var(--ink-3);margin-top:8px}
+
+/* Criterios */
+details.crit{background:var(--surface);border:1px solid var(--line);border-radius:8px}
+details.crit>summary{padding:14px 16px;cursor:pointer;font-weight:600;list-style:none;display:flex;gap:8px;align-items:center}
+details.crit>summary::-webkit-details-marker{display:none}
+details.crit>summary::before{content:"";width:8px;height:8px;border-right:2px solid var(--ink-3);border-bottom:2px solid var(--ink-3);transform:rotate(-45deg);transition:transform .15s}
+details.crit[open]>summary::before{transform:rotate(45deg)}
+.rules{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;padding:0 16px 16px}
+.rule{border:1px solid var(--line);border-radius:6px;padding:12px;display:flex;flex-direction:column;gap:6px}
+.rule h3{color:var(--ink)}
+.rule p{font-size:12px;color:var(--ink-3)}
+.rule label{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:12px;color:var(--ink-2)}
+.rule input{width:84px;font:inherit;font-family:var(--mono);font-size:12px;padding:3px 6px;border:1px solid var(--line);border-radius:4px;background:var(--bg);color:var(--ink);text-align:right}
+.rule .ro{font-family:var(--mono);font-size:12px}
+
+/* Estados */
+.skel{height:14px;border-radius:4px;background:linear-gradient(90deg,var(--surface-2),var(--line),var(--surface-2));background-size:200% 100%;animation:sh 1.2s linear infinite}
+@keyframes sh{to{background-position:-200% 0}}
+@media (prefers-reduced-motion:reduce){.skel{animation:none}}
+.empty{padding:28px 20px;text-align:left}
+.empty h2{margin-bottom:6px}
+.banner{border:1px solid var(--warn);background:var(--warn-bg);color:var(--warn);border-radius:6px;padding:10px 12px;font-size:13px}
+.banner.crit{border-color:var(--crit);background:var(--crit-bg);color:var(--crit)}
+footer.foot{font-size:12px;color:var(--ink-3);display:flex;flex-direction:column;gap:4px}
+
+@media (max-width:860px){
+  .summary{grid-template-columns:minmax(0,1fr)}
+  .dgrid{grid-template-columns:minmax(0,1fr)}
+}
+@media (max-width:420px){
+  .tiles{grid-template-columns:minmax(0,1fr)}
+}
+</style></head><body><div id="app" class="wrap"><header class="top"><div class="meta"><span class="eyebrow">Tesorería · Cartera de FCI</span><h1>Monitor de fondos</h1><span class="muted">Datos de CAFCI al 22/10/2026 · </span></div><div style="display:flex;flex-direction:column;gap:8px;align-items:flex-end"><span class="badge foto">Foto del 23/10/2026, 13:22 · no se actualiza</span></div></header><div class="status" role="status" aria-live="polite"></div><nav class="tabs" role="tablist" aria-label="Vistas"></nav><section class="summary" aria-label="Resumen"><div class="panel"><h2>Cartera y mercado</h2><div class="tiles"><div class="tile"><i class="sg s0" aria-hidden="true"></i><b>13</b><span class="l">Sin alarmas</span></div><div class="tile"><i class="sg s2" aria-hidden="true"></i><b>3</b><span class="l">Con alarmas</span></div><div class="tile"><i class="sg s2" aria-hidden="true"></i><b>0</b><span class="l">Revisar salida</span></div></div><div class="ctx"><span>Caución <b class="mono">20,1 % TNA</b> <span class="muted">(23/10)</span></span><span>TAMAR <b class="mono">24,4 % TNA</b> <span class="muted">(20/10)</span></span><span>Dólar CCL <b class="mono">$ 1.638,70</b> <span class="muted">(23/10)</span></span><span>Oficial <b class="mono">$ 1.526,67</b> <span class="muted">(21/10)</span></span><span>Inflación <b class="mono">1,9 %</b> mensual · <b class="mono">23,6 %</b> en el año <span class="muted">(sep-26)</span></span></div><div class="win"><h3>Le ganaron a la inflación 2026 <span class="muted">(5 de 16)</span></h3><div class="hb"><span class="hn" title="Max Ahorro Pesos - Clase B">Max Ahorro Pesos</span><span class="ht"><i style="width:100.0%"></i></span><span class="hv mono">+5,6 pp</span></div><div class="hb"><span class="hn" title="Schroder Renta Plus - Clase B">Schroder Renta Plus</span><span class="ht"><i style="width:83.0%"></i></span><span class="hv mono">+4,7 pp</span></div><div class="hb"><span class="hn" title="Balanz Capital Ahorro - Clase D">Balanz Capital Ahorro</span><span class="ht"><i style="width:40.0%"></i></span><span class="hv mono">+2,3 pp</span></div><div class="hb"><span class="hn" title="Supergestion Mix VI - Clase B">Supergestion Mix VI</span><span class="ht"><i style="width:13.5%"></i></span><span class="hv mono">+0,8 pp</span></div><div class="hb"><span class="hn" title="Fima Ahorro Plus - Clase C">Fima Ahorro Plus</span><span class="ht"><i style="width:5.1%"></i></span><span class="hv mono">+0,3 pp</span></div></div></div><div class="panel"><h2>Para mirar hoy</h2><ul class="alerts"><li><i class="sg s2" aria-hidden="true"></i><div class="t"><strong>Argenfunds Liquidez - Clase B</strong> <div class="muted">Flujo neto de los últimos 30 días -30,7 % del patrimonio del fondo</div></div></li><li><i class="sg s2" aria-hidden="true"></i><div class="t"><strong>Delta Pesos - Clase B</strong> <div class="muted">Flujo neto de los últimos 30 días -11,3 % del patrimonio del fondo</div></div></li><li><i class="sg s2" aria-hidden="true"></i><div class="t"><strong>FBA Renta Fija Pesos I - Clase B</strong> <div class="muted">Flujo neto de los últimos 30 días -16,1 % del patrimonio del fondo</div></div></li></ul></div></section><section class="sugg" aria-label="Sugerencia"><span class="stag">Sugerencia</span><div><p><b>Balanz Capital Ahorro - Clase D</b>. Rinde 6,44 % a 90 días (mediana de los T+1 de la cartera: 6,05 %), tiene un patrimonio de $ 796 mil M, sin alarmas, le ganó a la inflación 2026 (+2,3 pp).</p></div></section><section class="group"><header><h2>Liquidez inmediata (T+0)</h2><span class="muted">5 fondos · se comparan entre sí por tener el mismo plazo de rescate</span></header><div class="tablewrap"><table><thead><tr><th scope="col" aria-sort="none"><button data-act="sort" data-k="name">Fondo<span class="sa off" aria-hidden="true">↕</span></button></th><th scope="col" aria-sort="none"><button data-act="sort" data-k="sev">Señal<span class="sa off" aria-hidden="true">↕</span></button></th><th scope="col" aria-sort="none"><button data-act="sort" data-k="pat">Patrimonio<span class="sa off" aria-hidden="true">↕</span></button></th><th scope="col" aria-sort="none"><button data-act="sort" data-k="d30">30 d<span class="sa off" aria-hidden="true">↕</span></button></th><th scope="col" aria-sort="descending"><button data-act="sort" data-k="d90">90 d<span class="sa">↓</span></button></th><th scope="col" aria-sort="none"><button data-act="sort" data-k="ytd">Año<span class="sa off" aria-hidden="true">↕</span></button></th><th scope="col" aria-sort="none"><button data-act="sort" data-k="y1">1 año<span class="sa off" aria-hidden="true">↕</span></button></th><th scope="col" aria-sort="none"><button data-act="sort" data-k="vol">Volatilidad<span class="sa off" aria-hidden="true">↕</span></button></th><th scope="col">Alarmas</th></tr></thead><tbody><tr><td><button class="rowbtn" data-act="open" data-n="Argenfunds Renta Mixta - Clase B" aria-expanded="false"><span class="nm"><i class="chev" aria-hidden="true"></i>Argenfunds Renta Mixta - Clase B</span><span class="sub">Argenfunds · RENTA FIJA LECAP</span></button></td><td><span class="pill s0"><i class="sg s0" aria-hidden="true"></i>OK</span></td><td class="mono" title="Suma de clases vigentes (2)"><div class="patc"><span>$ 72 mil M</span><span class="pill neutral" style="font-family:var(--sans)">Mediano</span></div></td><td class="mono best">2,00 %</td><td class="mono best">6,04 %</td><td class="mono best">24,92 %</td><td class="mono best">34,46 %</td><td class="mono">—</td><td class="chipcell"><span class="muted">Sin alarmas</span></td></tr><tr><td><button class="rowbtn" data-act="open" data-n="Argenfunds Liquidez - Clase B" aria-expanded="false"><span class="nm"><i class="chev" aria-hidden="true"></i>Argenfunds Liquidez - Clase B</span><span class="sub">Argenfunds · MONEY MARKET ARS CLASICO</span></button></td><td><span class="pill s0"><i class="sg s0" aria-hidden="true"></i>OK</span></td><td class="mono" title="Suma de clases vigentes (3)"><div class="patc"><span>$ 163 mil M</span><span class="pill neutral" style="font-family:var(--sans)">Mediano</span></div></td><td class="mono">1,60 %</td><td class="mono">4,90 %</td><td class="mono">17,81 %</td><td class="mono">23,34 %</td><td class="mono">—</td><td class="chipcell"><span class="chips"><span class="chip al" title="Flujos: Flujo neto de los últimos 30 días -30,7 % del patrimonio del fondo"><i class="sg s2" aria-hidden="true"></i>Flujos <b class="mono">-30,7 %</b></span></span></td></tr><tr><td><button class="rowbtn" data-act="open" data-n="Fima Premium - Clase B" aria-expanded="false"><span class="nm"><i class="chev" aria-hidden="true"></i>Fima Premium - Clase B</span><span class="sub">Galicia · MONEY MARKET ARS CLASICO</span></button></td><td><span class="pill s0"><i class="sg s0" aria-hidden="true"></i>OK</span></td><td class="mono" title="Suma de clases vigentes (4)"><div class="patc"><span>$ 9.378 mil M</span><span class="pill neutral" style="font-family:var(--sans)">Grande</span></div></td><td class="mono">1,56 %</td><td class="mono">4,83 %</td><td class="mono">17,73 %</td><td class="mono">23,47 %</td><td class="mono">—</td><td class="chipcell"><span class="muted">Sin alarmas</span></td></tr><tr><td><button class="rowbtn" data-act="open" data-n="Delta Pesos - Clase B" aria-expanded="false"><span class="nm"><i class="chev" aria-hidden="true"></i>Delta Pesos - Clase B</span><span class="sub">Delta · MONEY MARKET ARS CLASICO</span></button></td><td><span class="pill s0"><i class="sg s0" aria-hidden="true"></i>OK</span></td><td class="mono" title="Suma de clases vigentes (5)"><div class="patc"><span>$ 1.139 mil M</span><span class="pill neutral" style="font-family:var(--sans)">Grande</span></div></td><td class="mono">1,55 %</td><td class="mono">4,78 %</td><td class="mono">17,32 %</td><td class="mono">22,91 %</td><td class="mono">—</td><td class="chipcell"><span class="chips"><span class="chip al" title="Flujos: Flujo neto de los últimos 30 días -11,3 % del patrimonio del fondo"><i class="sg s2" aria-hidden="true"></i>Flujos <b class="mono">-11,3 %</b></span></span></td></tr><tr><td><button class="rowbtn" data-act="open" data-n="FBA Money Market Pesos - Clase B" aria-expanded="false"><span class="nm"><i class="chev" aria-hidden="true"></i>FBA Money Market Pesos - Clase B</span><span class="sub">BBVA · MONEY MARKET ARS CLASICO</span></button></td><td><span class="pill s0"><i class="sg s0" aria-hidden="true"></i>OK</span></td><td class="mono" title="Suma de clases vigentes (4)"><div class="patc"><span>$ 4.083 mil M</span><span class="pill neutral" style="font-family:var(--sans)">Grande</span></div></td><td class="mono">1,55 %</td><td class="mono">4,77 %</td><td class="mono">17,95 %</td><td class="mono">23,74 %</td><td class="mono">—</td><td class="chipcell"><span class="muted">Sin alarmas</span></td></tr></tbody></table></div></section><section class="group"><header><h2>Rescate T+1</h2><span class="muted">11 fondos · se comparan entre sí por tener el mismo plazo de rescate</span></header><div class="tablewrap"><table><thead><tr><th scope="col" aria-sort="none"><button data-act="sort" data-k="name">Fondo<span class="sa off" aria-hidden="true">↕</span></button></th><th scope="col" aria-sort="none"><button data-act="sort" data-k="sev">Señal<span class="sa off" aria-hidden="true">↕</span></button></th><th scope="col" aria-sort="none"><button data-act="sort" data-k="pat">Patrimonio<span class="sa off" aria-hidden="true">↕</span></button></th><th scope="col" aria-sort="none"><button data-act="sort" data-k="d30">30 d<span class="sa off" aria-hidden="true">↕</span></button></th><th scope="col" aria-sort="descending"><button data-act="sort" data-k="d90">90 d<span class="sa">↓</span></button></th><th scope="col" aria-sort="none"><button data-act="sort" data-k="ytd">Año<span class="sa off" aria-hidden="true">↕</span></button></th><th scope="col" aria-sort="none"><button data-act="sort" data-k="y1">1 año<span class="sa off" aria-hidden="true">↕</span></button></th><th scope="col" aria-sort="none"><button data-act="sort" data-k="vol">Volatilidad<span class="sa off" aria-hidden="true">↕</span></button></th><th scope="col">Alarmas</th></tr></thead><tbody><tr><td><button class="rowbtn" data-act="open" data-n="Balanz Capital Ahorro - Clase D" aria-expanded="false"><span class="nm"><i class="chev" aria-hidden="true"></i>Balanz Capital Ahorro - Clase D</span><span class="sub">Balanz · RENTA FIJA T+1</span></button></td><td><span class="pill s0"><i class="sg s0" aria-hidden="true"></i>OK</span></td><td class="mono" title="Suma de clases vigentes (5)"><div class="patc"><span>$ 796 mil M</span><span class="pill neutral" style="font-family:var(--sans)">Grande</span></div></td><td class="mono">2,17 %</td><td class="mono best">6,44 %</td><td class="mono">27,95 %</td><td class="mono">28,29 %</td><td class="mono">—</td><td class="chipcell"><span class="muted">Sin alarmas</span></td></tr><tr><td><button class="rowbtn" data-act="open" data-n="Gainvest FF - Clase B" aria-expanded="false"><span class="nm"><i class="chev" aria-hidden="true"></i>Gainvest FF - Clase B</span><span class="sub">StoneX · RENTA FIJA T+1</span></button></td><td><span class="pill s0"><i class="sg s0" aria-hidden="true"></i>OK</span></td><td class="mono" title="Suma de clases vigentes (3)"><div class="patc"><span>$ 195 mil M</span><span class="pill neutral" style="font-family:var(--sans)">Mediano</span></div></td><td class="mono">1,95 %</td><td class="mono">6,20 %</td><td class="mono">24,70 %</td><td class="mono">33,94 %</td><td class="mono">—</td><td class="chipcell"><span class="muted">Sin alarmas</span></td></tr><tr><td><button class="rowbtn" data-act="open" data-n="Fima Ahorro Plus - Clase C" aria-expanded="false"><span class="nm"><i class="chev" aria-hidden="true"></i>Fima Ahorro Plus - Clase C</span><span class="sub">Galicia · RENTA FIJA T+1</span></button></td><td><span class="pill s0"><i class="sg s0" aria-hidden="true"></i>OK</span></td><td class="mono" title="Suma de clases vigentes (4)"><div class="patc"><span>$ 819 mil M</span><span class="pill neutral" style="font-family:var(--sans)">Grande</span></div></td><td class="mono best">2,20 %</td><td class="mono">6,17 %</td><td class="mono">25,85 %</td><td class="mono">35,96 %</td><td class="mono">—</td><td class="chipcell"><span class="muted">Sin alarmas</span></td></tr><tr><td><button class="rowbtn" data-act="open" data-n="Max Ahorro Pesos - Clase B" aria-expanded="false"><span class="nm"><i class="chev" aria-hidden="true"></i>Max Ahorro Pesos - Clase B</span><span class="sub">Max Capital · RENTA FIJA T+1</span></button></td><td><span class="pill s0"><i class="sg s0" aria-hidden="true"></i>OK</span></td><td class="mono" title="Suma de clases vigentes (3)"><div class="patc"><span>$ 58 mil M</span><span class="pill neutral" style="font-family:var(--sans)">Mediano</span></div></td><td class="mono">2,07 %</td><td class="mono">6,17 %</td><td class="mono best">31,49 %</td><td class="mono best">48,02 %</td><td class="mono">—</td><td class="chipcell"><span class="muted">Sin alarmas</span></td></tr><tr><td><button class="rowbtn" data-act="open" data-n="Supergestion Mix VI - Clase B" aria-expanded="false"><span class="nm"><i class="chev" aria-hidden="true"></i>Supergestion Mix VI - Clase B</span><span class="sub">Santander · RENTA FIJA T+1</span></button></td><td><span class="pill s0"><i class="sg s0" aria-hidden="true"></i>OK</span></td><td class="mono" title="Suma de clases vigentes (5)"><div class="patc"><span>$ 1.172 mil M</span><span class="pill neutral" style="font-family:var(--sans)">Grande</span></div></td><td class="mono">2,04 %</td><td class="mono">6,12 %</td><td class="mono">26,27 %</td><td class="mono">37,22 %</td><td class="mono">—</td><td class="chipcell"><span class="muted">Sin alarmas</span></td></tr><tr><td><button class="rowbtn" data-act="open" data-n="Pionero Renta Ahorro - Clase B" aria-expanded="false"><span class="nm"><i class="chev" aria-hidden="true"></i>Pionero Renta Ahorro - Clase B</span><span class="sub">Macro · RENTA FIJA T+1</span></button></td><td><span class="pill s0"><i class="sg s0" aria-hidden="true"></i>OK</span></td><td class="mono" title="Suma de clases vigentes (2)"><div class="patc"><span>$ 294 mil M</span><span class="pill neutral" style="font-family:var(--sans)">Mediano</span></div></td><td class="mono">1,94 %</td><td class="mono">6,05 %</td><td class="mono">23,64 %</td><td class="mono">33,14 %</td><td class="mono">—</td><td class="chipcell"><span class="muted">Sin alarmas</span></td></tr><tr><td><button class="rowbtn" data-act="open" data-n="Fima Ahorro Pesos - Clase C" aria-expanded="false"><span class="nm"><i class="chev" aria-hidden="true"></i>Fima Ahorro Pesos - Clase C</span><span class="sub">Galicia · RENTA FIJA T+1</span></button></td><td><span class="pill s0"><i class="sg s0" aria-hidden="true"></i>OK</span></td><td class="mono" title="Suma de clases vigentes (3)"><div class="patc"><span>$ 789 mil M</span><span class="pill neutral" style="font-family:var(--sans)">Grande</span></div></td><td class="mono">1,98 %</td><td class="mono">5,87 %</td><td class="mono">23,18 %</td><td class="mono">31,51 %</td><td class="mono">—</td><td class="chipcell"><span class="muted">Sin alarmas</span></td></tr><tr><td><button class="rowbtn" data-act="open" data-n="FBA Renta Fija Pesos I - Clase B" aria-expanded="false"><span class="nm"><i class="chev" aria-hidden="true"></i>FBA Renta Fija Pesos I - Clase B</span><span class="sub">BBVA · RENTA FIJA T+1</span></button></td><td><span class="pill s0"><i class="sg s0" aria-hidden="true"></i>OK</span></td><td class="mono" title="Suma de clases vigentes (2)"><div class="patc"><span>$ 178 mil M</span><span class="pill neutral" style="font-family:var(--sans)">Mediano</span></div></td><td class="mono">1,88 %</td><td class="mono">5,76 %</td><td class="mono">23,29 %</td><td class="mono">31,06 %</td><td class="mono">—</td><td class="chipcell"><span class="chips"><span class="chip al" title="Flujos: Flujo neto de los últimos 30 días -16,1 % del patrimonio del fondo"><i class="sg s2" aria-hidden="true"></i>Flujos <b class="mono">-16,1 %</b></span></span></td></tr><tr><td><button class="rowbtn" data-act="open" data-n="Delta Ahorro - Clase B" aria-expanded="false"><span class="nm"><i class="chev" aria-hidden="true"></i>Delta Ahorro - Clase B</span><span class="sub">Delta · RENTA FIJA T+1</span></button></td><td><span class="pill s0"><i class="sg s0" aria-hidden="true"></i>OK</span></td><td class="mono" title="Suma de clases vigentes (2)"><div class="patc"><span>$ 329 mil M</span><span class="pill neutral" style="font-family:var(--sans)">Mediano</span></div></td><td class="mono">1,82 %</td><td class="mono">5,76 %</td><td class="mono">22,25 %</td><td class="mono">33,91 %</td><td class="mono">—</td><td class="chipcell"><span class="muted">Sin alarmas</span></td></tr><tr><td><button class="rowbtn" data-act="open" data-n="Pellegrini Renta Fija - Clase B" aria-expanded="false"><span class="nm"><i class="chev" aria-hidden="true"></i>Pellegrini Renta Fija - Clase B</span><span class="sub">Nacion · RENTA FIJA T+1</span></button></td><td><span class="pill s0"><i class="sg s0" aria-hidden="true"></i>OK</span></td><td class="mono" title="Suma de clases vigentes (2)"><div class="patc"><span>$ 360 mil M</span><span class="pill neutral" style="font-family:var(--sans)">Mediano</span></div></td><td class="mono">1,96 %</td><td class="mono">5,71 %</td><td class="mono">22,69 %</td><td class="mono">32,09 %</td><td class="mono">—</td><td class="chipcell"><span class="muted">Sin alarmas</span></td></tr><tr><td><button class="rowbtn" data-act="open" data-n="Schroder Renta Plus - Clase B" aria-expanded="false"><span class="nm"><i class="chev" aria-hidden="true"></i>Schroder Renta Plus - Clase B</span><span class="sub">Schroder · RENTA FIJA T+1</span></button></td><td><span class="pill s0"><i class="sg s0" aria-hidden="true"></i>OK</span></td><td class="mono" title="Suma de clases vigentes (3)"><div class="patc"><span>$ 414 mil M</span><span class="pill neutral" style="font-family:var(--sans)">Mediano</span></div></td><td class="mono">1,95 %</td><td class="mono">5,60 %</td><td class="mono">30,03 %</td><td class="mono">44,17 %</td><td class="mono">—</td><td class="chipcell"><span class="muted">Sin alarmas</span></td></tr></tbody></table></div></section><section class="panel cmp" aria-label="Comparativo de rendimiento"><div class="cmph"><h2>Rendimiento de todos los fondos a 90 días</h2></div><div class="hgrp"><h3>Liquidez inmediata (T+0) <span class="muted">· mediana de la cartera 4,83 %</span></h3><div class="hb"><span class="hn">Argenfunds Renta Mixta - Clase B</span><span class="ht"><i style="width:93.7%;"></i></span><span class="hv mono">6,04 %</span></div><div class="hb infl"><span class="hn">Inflación (sep-26)</span><span class="ht"><i style="width:90.2%;background:var(--warn)"></i></span><span class="hv mono">5,81 %</span></div><div class="hb"><span class="hn">Argenfunds Liquidez - Clase B</span><span class="ht"><i style="width:76.1%;"></i></span><span class="hv mono">4,90 %</span></div><div class="hb"><span class="hn">Fima Premium - Clase B</span><span class="ht"><i style="width:75.0%;"></i></span><span class="hv mono">4,83 %</span></div><div class="hb"><span class="hn">Delta Pesos - Clase B</span><span class="ht"><i style="width:74.2%;"></i></span><span class="hv mono">4,78 %</span></div><div class="hb"><span class="hn">FBA Money Market Pesos - Clase B</span><span class="ht"><i style="width:74.1%;"></i></span><span class="hv mono">4,77 %</span></div></div><div class="hgrp"><h3>Rescate T+1 <span class="muted">· mediana de la cartera 6,05 %</span></h3><div class="hb"><span class="hn">Balanz Capital Ahorro - Clase D</span><span class="ht"><i style="width:100.0%;"></i></span><span class="hv mono">6,44 %</span></div><div class="hb"><span class="hn">Gainvest FF - Clase B</span><span class="ht"><i style="width:96.2%;"></i></span><span class="hv mono">6,20 %</span></div><div class="hb"><span class="hn">Fima Ahorro Plus - Clase C</span><span class="ht"><i style="width:95.8%;"></i></span><span class="hv mono">6,17 %</span></div><div class="hb"><span class="hn">Max Ahorro Pesos - Clase B</span><span class="ht"><i style="width:95.8%;"></i></span><span class="hv mono">6,17 %</span></div><div class="hb"><span class="hn">Supergestion Mix VI - Clase B</span><span class="ht"><i style="width:95.0%;"></i></span><span class="hv mono">6,12 %</span></div><div class="hb"><span class="hn">Pionero Renta Ahorro - Clase B</span><span class="ht"><i style="width:94.0%;"></i></span><span class="hv mono">6,05 %</span></div><div class="hb"><span class="hn">Fima Ahorro Pesos - Clase C</span><span class="ht"><i style="width:91.2%;"></i></span><span class="hv mono">5,87 %</span></div><div class="hb infl"><span class="hn">Inflación (sep-26)</span><span class="ht"><i style="width:90.2%;background:var(--warn)"></i></span><span class="hv mono">5,81 %</span></div><div class="hb"><span class="hn">FBA Renta Fija Pesos I - Clase B</span><span class="ht"><i style="width:89.4%;"></i></span><span class="hv mono">5,76 %</span></div><div class="hb"><span class="hn">Delta Ahorro - Clase B</span><span class="ht"><i style="width:89.3%;"></i></span><span class="hv mono">5,76 %</span></div><div class="hb"><span class="hn">Pellegrini Renta Fija - Clase B</span><span class="ht"><i style="width:88.6%;"></i></span><span class="hv mono">5,71 %</span></div><div class="hb"><span class="hn">Schroder Renta Plus - Clase B</span><span class="ht"><i style="width:87.0%;"></i></span><span class="hv mono">5,60 %</span></div></div><p class="note">Rendimiento a 90 días, ordenado dentro de cada grupo de plazo de rescate. En naranja, la inflación del mismo período (hasta el mes del último dato).</p></section><details class="crit"><summary>Criterios de las alarmas</summary><div class="rules"><div class="rule"><h3>Rendimiento frente a fondos similares</h3><p>Posición del fondo entre los de su categoría, mes por mes. Se considera bajo desde el percentil indicado (75 = peor cuartil; 100 es el peor). La alarma suena si ocurre en 2 de los últimos 3 meses.</p><label>Bajo desde percentil<span class="ro">75</span></label></div><div class="rule"><h3>Flujos</h3><p>Retiros netos de los últimos 30 días como % del patrimonio total del fondo (todas las clases). Una salida fuerte puede obligar al gestor a vender activos. Es una estimación de Fonditos.</p><label>Alarma desde (%)<span class="ro">-10</span></label></div><div class="rule"><h3>Composición</h3><p>Mayor cambio, en puntos porcentuales, de un tipo de activo contra el mes anterior.</p><label>Alarma desde (pp)<span class="ro">20</span></label></div><div class="rule"><h3>Antigüedad del dato</h3><p>Días entre el último dato del fondo y la consulta. Si se supera, aparece un aviso arriba del tablero (no es una alarma del fondo).</p><label>Aviso desde (días)<span class="ro">7</span></label></div><div class="rule"><h3>Revisar salida</h3><p>Cantidad de alarmas encendidas (de 3) para que aparezca "Revisar salida". La decisión final es siempre humana.</p><label>Condiciones necesarias<span class="ro">3</span></label></div></div></details><details class="crit"><summary>Criterios de nuevos fondos</summary><div class="rules"><div class="rule"><h3>Solo rescate T+1</h3><p>Considera solo los fondos T+1 de la cartera (los T+0 rinden todos parecido). Apagado, considera todos.</p><label class="sw"><span class="ro">Sí, se aplica</span></label></div><div class="rule"><h3>Tamaño</h3><p>Patrimonio total del fondo (todas las clases) por encima del mínimo. También se usa en la pestaña «Otros fondos».</p><label class="sw"><span class="ro">Sí, se aplica</span></label><label>Patrimonio mínimo (mil M de pesos)<span class="ro">20</span></label></div><div class="rule"><h3>Sin alarmas</h3><p>El fondo no tiene ninguna alarma encendida.</p><label class="sw"><span class="ro">Sí, se aplica</span></label></div><div class="rule"><h3>Rendimiento sostenido</h3><p>No estuvo en el peor cuartil de su categoría en ninguno de los últimos 3 meses cerrados.</p><label class="sw"><span class="ro">Sí, se aplica</span></label></div><div class="rule"><h3>Le ganó a la inflación</h3><p>Su rendimiento en el año (hasta el mes del último dato de inflación) superó la inflación acumulada del mismo período.</p><label class="sw"><span class="ro">Sí, se aplica</span></label></div><div class="rule"><h3>Elección</h3><p>Entre los que cumplen, el de mayor rendimiento a 90 días. Si elegís un tipo de inversión, el de mayor peso en ese tipo.</p><label>Preferir fondos con inversión en<span class="ro">Sin preferencia</span></label></div></div></details><footer class="foot"><span><b>Patrimonio:</b> suma de las clases del fondo con datos de los últimos 7 días, expresado en miles de millones de pesos (mil M). Las comisiones se informan por clase.</span><span><b>Flujos:</b> estimación de Fonditos (datos CAFCI) para el fondo completo, sobre su patrimonio actual.</span><span><b>Volatilidad:</b> de los últimos 90 días. Es el desvío de los retornos diarios por día corrido, anualizado (×√365). Evita que los fines de semana y feriados parezcan riesgo. Es un dato informativo: no entra en las alarmas ni en la señal de salida.</span><span>Datos CAFCI vía Fonditos, con un día hábil de demora. Las señales ordenan la revisión; no son una recomendación de inversión.</span></footer></div></body></html>
