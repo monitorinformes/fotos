@@ -1,0 +1,292 @@
+{
+ "fechaDatos": "22/10/2026",
+ "fotoGenerada": "23/10/2026, 16:00",
+ "mercado": {
+  "caucion": "20,1 % TNA",
+  "caucionFecha": "23/10",
+  "tamar": "24,4 % TNA",
+  "tamarFecha": "20/10",
+  "ccl": "$ 1.638,70",
+  "cclFecha": "23/10",
+  "oficial": "$ 1.526,67",
+  "oficialFecha": "21/10"
+ },
+ "inflacion": {
+  "mensual": 1.9,
+  "ytd": 23.6,
+  "d90": 5.81,
+  "mes": "sep-26"
+ },
+ "fondos": [
+  {
+   "nombre": "Argenfunds Renta Mixta - Clase B",
+   "gestora": "Argenfunds",
+   "subcat": "RENTA FIJA LECAP",
+   "liq": "T0",
+   "clases": 2,
+   "pat": 72.0,
+   "d30": 2.0,
+   "d90": 6.04,
+   "ytd": 24.92,
+   "y1": 34.46,
+   "vol": 1.09,
+   "alarmas": [],
+   "ytdInfl": 10.0
+  },
+  {
+   "nombre": "Argenfunds Liquidez - Clase B",
+   "gestora": "Argenfunds",
+   "subcat": "MONEY MARKET ARS CLASICO",
+   "liq": "T0",
+   "clases": 3,
+   "pat": 163.0,
+   "d30": 1.6,
+   "d90": 4.9,
+   "ytd": 17.81,
+   "y1": 23.34,
+   "vol": 0.04,
+   "alarmas": [
+    {
+     "tipo": "Flujos",
+     "valor": "-30,7 %",
+     "texto": "Flujo neto de los últimos 30 días -30,7 % del patrimonio del fondo"
+    }
+   ],
+   "ytdInfl": 10.0
+  },
+  {
+   "nombre": "Fima Premium - Clase B",
+   "gestora": "Galicia",
+   "subcat": "MONEY MARKET ARS CLASICO",
+   "liq": "T0",
+   "clases": 4,
+   "pat": 9378.0,
+   "d30": 1.56,
+   "d90": 4.83,
+   "ytd": 17.73,
+   "y1": 23.47,
+   "vol": 0.03,
+   "alarmas": [],
+   "ytdInfl": 10.0
+  },
+  {
+   "nombre": "Delta Pesos - Clase B",
+   "gestora": "Delta",
+   "subcat": "MONEY MARKET ARS CLASICO",
+   "liq": "T0",
+   "clases": 5,
+   "pat": 1139.0,
+   "d30": 1.55,
+   "d90": 4.78,
+   "ytd": 17.32,
+   "y1": 22.91,
+   "vol": 0.03,
+   "alarmas": [
+    {
+     "tipo": "Flujos",
+     "valor": "-11,3 %",
+     "texto": "Flujo neto de los últimos 30 días -11,3 % del patrimonio del fondo"
+    }
+   ],
+   "ytdInfl": 10.0
+  },
+  {
+   "nombre": "FBA Money Market Pesos - Clase B",
+   "gestora": "BBVA",
+   "subcat": "MONEY MARKET ARS CLASICO",
+   "liq": "T0",
+   "clases": 4,
+   "pat": 4083.0,
+   "d30": 1.55,
+   "d90": 4.77,
+   "ytd": 17.95,
+   "y1": 23.74,
+   "vol": 0.02,
+   "alarmas": [],
+   "ytdInfl": 10.0
+  },
+  {
+   "nombre": "Balanz Capital Ahorro - Clase D",
+   "gestora": "Balanz",
+   "subcat": "RENTA FIJA T+1",
+   "liq": "T1",
+   "clases": 5,
+   "pat": 796.0,
+   "d30": 2.17,
+   "d90": 6.44,
+   "ytd": 27.95,
+   "y1": 28.29,
+   "vol": 1.57,
+   "alarmas": [],
+   "ytdInfl": 25.9
+  },
+  {
+   "nombre": "Gainvest FF - Clase B",
+   "gestora": "StoneX",
+   "subcat": "RENTA FIJA T+1",
+   "liq": "T1",
+   "clases": 3,
+   "pat": 195.0,
+   "d30": 1.95,
+   "d90": 6.2,
+   "ytd": 24.7,
+   "y1": 33.94,
+   "vol": 0.07,
+   "alarmas": [],
+   "ytdInfl": 10.0
+  },
+  {
+   "nombre": "Fima Ahorro Plus - Clase C",
+   "gestora": "Galicia",
+   "subcat": "RENTA FIJA T+1",
+   "liq": "T1",
+   "clases": 4,
+   "pat": 819.0,
+   "d30": 2.2,
+   "d90": 6.17,
+   "ytd": 25.85,
+   "y1": 35.96,
+   "vol": 1.7,
+   "alarmas": [],
+   "ytdInfl": 23.9
+  },
+  {
+   "nombre": "Max Ahorro Pesos - Clase B",
+   "gestora": "Max Capital",
+   "subcat": "RENTA FIJA T+1",
+   "liq": "T1",
+   "clases": 3,
+   "pat": 58.0,
+   "d30": 2.07,
+   "d90": 6.17,
+   "ytd": 31.49,
+   "y1": 48.02,
+   "vol": 2.49,
+   "alarmas": [],
+   "ytdInfl": 29.2
+  },
+  {
+   "nombre": "Supergestion Mix VI - Clase B",
+   "gestora": "Santander",
+   "subcat": "RENTA FIJA T+1",
+   "liq": "T1",
+   "clases": 5,
+   "pat": 1172.0,
+   "d30": 2.04,
+   "d90": 6.12,
+   "ytd": 26.28,
+   "y1": 37.22,
+   "vol": 1.55,
+   "alarmas": [],
+   "ytdInfl": 24.4
+  },
+  {
+   "nombre": "Pionero Renta Ahorro - Clase B",
+   "gestora": "Macro",
+   "subcat": "RENTA FIJA T+1",
+   "liq": "T1",
+   "clases": 2,
+   "pat": 294.0,
+   "d30": 1.94,
+   "d90": 6.05,
+   "ytd": 23.64,
+   "y1": 33.14,
+   "vol": 1.23,
+   "alarmas": [],
+   "ytdInfl": 10.0
+  },
+  {
+   "nombre": "Fima Ahorro Pesos - Clase C",
+   "gestora": "Galicia",
+   "subcat": "RENTA FIJA T+1",
+   "liq": "T1",
+   "clases": 3,
+   "pat": 789.0,
+   "d30": 1.98,
+   "d90": 5.87,
+   "ytd": 23.18,
+   "y1": 31.51,
+   "vol": 1.28,
+   "alarmas": [],
+   "ytdInfl": 10.0
+  },
+  {
+   "nombre": "FBA Renta Fija Pesos I - Clase B",
+   "gestora": "BBVA",
+   "subcat": "RENTA FIJA T+1",
+   "liq": "T1",
+   "clases": 2,
+   "pat": 178.0,
+   "d30": 1.88,
+   "d90": 5.76,
+   "ytd": 23.29,
+   "y1": 31.06,
+   "vol": 1.27,
+   "alarmas": [
+    {
+     "tipo": "Flujos",
+     "valor": "-16,1 %",
+     "texto": "Flujo neto de los últimos 30 días -16,1 % del patrimonio del fondo"
+    }
+   ],
+   "ytdInfl": 10.0
+  },
+  {
+   "nombre": "Delta Ahorro - Clase B",
+   "gestora": "Delta",
+   "subcat": "RENTA FIJA T+1",
+   "liq": "T1",
+   "clases": 2,
+   "pat": 329.0,
+   "d30": 1.82,
+   "d90": 5.76,
+   "ytd": 22.25,
+   "y1": 33.91,
+   "vol": 0.54,
+   "alarmas": [],
+   "ytdInfl": 10.0
+  },
+  {
+   "nombre": "Pellegrini Renta Fija - Clase B",
+   "gestora": "Nacion",
+   "subcat": "RENTA FIJA T+1",
+   "liq": "T1",
+   "clases": 2,
+   "pat": 360.0,
+   "d30": 1.96,
+   "d90": 5.71,
+   "ytd": 22.69,
+   "y1": 32.09,
+   "vol": 1.3,
+   "alarmas": [
+    {
+     "tipo": "Rendimiento",
+     "valor": "2 de 3",
+     "texto": "Bajo rendimiento: peor cuartil en 2 de los últimos 3 meses"
+    }
+   ],
+   "ytdInfl": 10.0
+  },
+  {
+   "nombre": "Schroder Renta Plus - Clase B",
+   "gestora": "Schroder",
+   "subcat": "RENTA FIJA T+1",
+   "liq": "T1",
+   "clases": 3,
+   "pat": 414.0,
+   "d30": 1.95,
+   "d90": 5.6,
+   "ytd": 30.03,
+   "y1": 44.17,
+   "vol": 2.07,
+   "alarmas": [
+    {
+     "tipo": "Composición",
+     "valor": "-42,6 pp",
+     "texto": "Tasa Fija ARS -42,6 pp vs mes anterior"
+    }
+   ],
+   "ytdInfl": 28.3
+  }
+ ]
+}
